@@ -35,48 +35,67 @@
     <div class="row g-0 h-100">
       <!-- Panneau latéral gauche : filtres + cartes projets -->
       <aside class="col-12 col-lg-4 col-xxl-3 sidebar" id="sidebar">
-        <div class="filters p-3">
-          <h6 class="filter-title mb-3">Filtres</h6>
-
-          <div class="mb-3">
-            <label class="form-label small text-uppercase text-muted" for="inputSearch">Recherche globale</label>
-            <input type="search" class="form-control form-control-sm" id="inputSearch"
-                   placeholder="Nom, référence, promoteur, adresse…" autocomplete="off">
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label small text-uppercase text-muted">Statut du projet</label>
-            <div class="d-flex flex-wrap gap-2" id="statutFilters">
-              <label class="statut-chip" data-statut="devis"><input type="checkbox" value="devis"> Devis</label>
-              <label class="statut-chip" data-statut="en_cours"><input type="checkbox" value="en_cours"> En cours</label>
-              <label class="statut-chip" data-statut="finalise"><input type="checkbox" value="finalise"> Finalisé</label>
-              <label class="statut-chip" data-statut="livre"><input type="checkbox" value="livre"> Livré</label>
+        <div class="filters">
+          <div class="filter-header">
+            <div>
+              <div class="filter-kicker">Exploration</div>
+              <h6 class="filter-title">Filtres projets</h6>
+              <p class="filter-intro">Affinez la liste et la carte selon vos critères.</p>
             </div>
+            <span class="filter-count" id="countLabel">—</span>
           </div>
 
-          <div class="row g-2 mb-3">
-            <div class="col-sm-6">
-              <label class="form-label small text-uppercase text-muted" for="inputPromoteur">Promoteur</label>
-              <select class="form-select form-select-sm" id="inputPromoteur">
-                <option value="">Tous les promoteurs</option>
-              </select>
+          <div class="filter-body">
+            <div class="filter-section filter-search">
+              <label class="filter-label" for="inputSearch">Rechercher un projet</label>
+              <div class="search-control">
+                <span class="search-icon" aria-hidden="true">⌕</span>
+                <input type="search" class="form-control" id="inputSearch"
+                       placeholder="Nom, référence, promoteur…" autocomplete="off">
+              </div>
+              <div class="filter-hint">La recherche couvre aussi l’adresse et la ville.</div>
             </div>
-            <div class="col-sm-6">
-              <label class="form-label small text-uppercase text-muted" for="inputEtape">Étape actuelle</label>
-              <input type="text" class="form-control form-control-sm" id="inputEtape"
-                     list="etapeDatalist" placeholder="Ex : structure…" autocomplete="off">
-              <datalist id="etapeDatalist"></datalist>
+
+            <div class="filter-section">
+              <div class="filter-section-heading">
+                <label class="filter-label mb-0">Statut du projet</label>
+                <span class="filter-hint">Plusieurs choix</span>
+              </div>
+              <div class="status-grid" id="statutFilters">
+                <label class="statut-chip" data-statut="devis"><input type="checkbox" value="devis"><span class="status-dot"></span> Devis</label>
+                <label class="statut-chip" data-statut="en_cours"><input type="checkbox" value="en_cours"><span class="status-dot"></span> En cours</label>
+                <label class="statut-chip" data-statut="finalise"><input type="checkbox" value="finalise"><span class="status-dot"></span> Finalisé</label>
+                <label class="statut-chip" data-statut="livre"><input type="checkbox" value="livre"><span class="status-dot"></span> Livré</label>
+              </div>
             </div>
-          </div>
 
-          <div class="form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" id="toggleGps">
-            <label class="form-check-label small" for="toggleGps">Projets géolocalisés uniquement</label>
-          </div>
+            <div class="filter-section">
+              <div class="filter-label">Caractéristiques</div>
+              <div class="row g-3">
+                <div class="col-sm-6">
+                  <label class="field-label" for="inputPromoteur">Promoteur</label>
+                  <select class="form-select" id="inputPromoteur">
+                    <option value="">Tous les promoteurs</option>
+                  </select>
+                </div>
+                <div class="col-sm-6">
+                  <label class="field-label" for="inputEtape">Étape actuelle</label>
+                  <input type="text" class="form-control" id="inputEtape"
+                         list="etapeDatalist" placeholder="Ex. structure" autocomplete="off">
+                  <datalist id="etapeDatalist"></datalist>
+                </div>
+              </div>
+            </div>
 
-          <div class="d-flex align-items-center justify-content-between">
-            <button class="btn btn-sm btn-outline-secondary" id="btnReset">Réinitialiser les filtres</button>
-            <span class="small text-muted" id="countLabel">—</span>
+            <label class="gps-filter" for="toggleGps">
+              <span class="gps-copy"><strong>Projets géolocalisés</strong><small>Afficher uniquement les projets sur la carte</small></span>
+              <input class="form-check-input" type="checkbox" id="toggleGps">
+            </label>
+
+            <div class="filter-actions">
+              <button class="btn btn-sm btn-outline-secondary" id="btnReset">Réinitialiser</button>
+              <span class="filter-action-note">Filtres combinés automatiquement</span>
+            </div>
           </div>
         </div>
 

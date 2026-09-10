@@ -57,35 +57,113 @@ body {
   min-height: 0;
 }
 .filters { border-bottom: 1px solid var(--border); }
-.filter-title {
+.filter-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 18px 15px;
+  background: linear-gradient(135deg, rgba(58, 110, 165, .16), rgba(24, 33, 58, .18));
+  border-bottom: 1px solid var(--border);
+}
+.filter-kicker {
+  color: #7fb2ff;
+  font-size: .67rem;
+  font-weight: 700;
+  letter-spacing: .14em;
   text-transform: uppercase;
-  font-size: .72rem;
-  letter-spacing: .12em;
+  margin-bottom: 4px;
+}
+.filter-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.08rem;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+.filter-intro {
   color: var(--muted);
+  font-size: .76rem;
+  line-height: 1.4;
+  margin: 4px 0 0;
+}
+.filter-count {
+  flex: 0 0 auto;
+  color: #dce8ff;
+  background: rgba(58, 110, 165, .2);
+  border: 1px solid rgba(127, 178, 255, .28);
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 600;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+.filter-body { padding: 16px 18px 17px; }
+.filter-section { margin-bottom: 18px; }
+.filter-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
+.filter-label, .field-label {
+  display: block;
+  color: #d9e4fa;
+  font-size: .75rem;
+  font-weight: 650;
+  margin-bottom: 8px;
+}
+.field-label { color: var(--muted); font-size: .69rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.filter-hint { color: var(--muted); font-size: .68rem; line-height: 1.35; }
+.search-control { position: relative; }
+.search-icon { position: absolute; left: 11px; top: 50%; color: #7fb2ff; font-size: 1.2rem; line-height: 1; transform: translateY(-54%); z-index: 2; }
+.search-control .form-control { padding-left: 32px; }
+.filter-search .filter-hint { margin-top: 6px; }
+.status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 }
 
 /* ---------- Chips de statut ---------- */
 .statut-chip {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   font-size: .8rem;
-  padding: 4px 10px;
-  border-radius: 20px;
+  min-height: 38px;
+  padding: 7px 10px;
+  border-radius: 7px;
   border: 1px solid var(--border);
   cursor: pointer;
   user-select: none;
   color: var(--text);
+  background: rgba(13, 19, 38, .55);
+  transition: background .15s, border-color .15s, color .15s;
 }
+.statut-chip:hover { border-color: #50658e; background: rgba(31, 46, 78, .65); }
 .statut-chip:has(input:checked) {
   border-color: var(--chip-color);
+  color: #fff;
+  background: color-mix(in srgb, var(--chip-color) 12%, var(--panel-2));
   box-shadow: 0 0 0 1px var(--chip-color) inset;
 }
 .statut-chip input { accent-color: var(--chip-color); }
+.status-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--chip-color); }
 .statut-chip[data-statut="devis"]     { --chip-color: #f5c518; }
 .statut-chip[data-statut="en_cours"]  { --chip-color: #2196f3; }
 .statut-chip[data-statut="finalise"]  { --chip-color: #4caf50; }
 .statut-chip[data-statut="livre"]     { --chip-color: #26a69a; }
+.gps-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 17px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  cursor: pointer;
+  background: rgba(13, 19, 38, .45);
+}
+.gps-copy { display: flex; flex-direction: column; gap: 3px; }
+.gps-copy strong { color: #d9e4fa; font-size: .78rem; font-weight: 600; }
+.gps-copy small { color: var(--muted); font-size: .68rem; }
+.gps-filter .form-check-input { margin: 0; flex: 0 0 auto; }
+.filter-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 14px; border-top: 1px solid var(--border); }
+.filter-action-note { color: var(--muted); font-size: .66rem; text-align: right; }
 
 /* ---------- Pastilles / badges ---------- */
 .dot {
@@ -216,6 +294,7 @@ body {
   border-color: var(--border);
   color: var(--text);
 }
+.form-control, .form-select { min-height: 38px; font-size: .8rem; }
 .form-control::placeholder { color: #5a6a8f; }
 .form-control:focus, .form-select:focus {
   background: #0d1326;
@@ -277,4 +356,13 @@ body {
   .mobile-tabs { top: 52px; }
   .stat-pill { font-size: .68rem; padding: 2px 8px; }
   #btnSync { font-size: .75rem; }
+  .filter-header { padding: 16px 16px 14px; }
+  .filter-body { padding: 15px 16px 17px; }
+}
+
+@media (max-width: 420px) {
+  .filter-intro { max-width: 220px; }
+  .status-grid { grid-template-columns: 1fr 1fr; gap: 7px; }
+  .statut-chip { padding-left: 8px; padding-right: 8px; font-size: .76rem; }
+  .filter-action-note { display: none; }
 }
