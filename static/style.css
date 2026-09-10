@@ -43,6 +43,10 @@ body {
   white-space: nowrap;
 }
 #btnSync { white-space: nowrap; }
+#btnExtract { white-space: nowrap; }
+#btnExtractIcon { display: inline-block; min-width: 1.2em; }
+#btnExtract.ai-running #btnExtractIcon { animation: ai-spin 1s linear infinite; }
+@keyframes ai-spin { to { transform: rotate(360deg); } }
 
 /* ---------- Layout ---------- */
 .app-main { height: calc(100vh - 57px); }

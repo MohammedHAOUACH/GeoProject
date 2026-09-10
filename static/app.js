@@ -40,6 +40,7 @@ const els = {
   sync: $('#btnSync'),
   syncLabel: $('#btnSyncLabel'),
   extract: $('#btnExtract'),
+  extractIcon: $('#btnExtractIcon'),
   extractLabel: $('#btnExtractLabel'),
   list: $('#projectList'),
   count: $('#countLabel'),
@@ -370,6 +371,8 @@ async function pollExtract() {
     if (st.running) {
       clearTimeout(extractTimer);
       extractTimer = setTimeout(pollExtract, 2000);
+    } else if (st.finished_at) {
+      await Promise.all([applyFilters(), refreshStats()]);
     }
   } catch (err) { console.error('Erreur de statut extraction :', err); }
 }
@@ -380,13 +383,20 @@ function renderExtractStatus(st) {
   if (!st.enabled) return;
   if (st.running) {
     els.extract.disabled = true;
-    const cur = st.current ? ` — ${esc(st.current)}` : '';
-    els.extractLabel.textContent = `🤖 ${st.done}/${st.total}${cur}`;
+    els.extract.classList.add('ai-running');
+    els.extractIcon.textContent = '⟳';
+    const total = st.total || '…';
+    const cur = st.current ? ` · ${st.current}` : '';
+    els.extractLabel.textContent = `Traitement ${st.done}/${total}${cur}`;
   } else {
     els.extract.disabled = false;
+    els.extract.classList.remove('ai-running');
     const skipped = st.skipped ? ` · ${st.skipped} ignoré${st.skipped > 1 ? 's' : ''}` : '';
     const errs = st.errors && st.errors.length ? ` · ${st.errors.length} erreur${st.errors.length > 1 ? 's' : ''}` : '';
-    els.extractLabel.textContent = `🤖 Extraire (AI) · ${st.done}/${st.total}${skipped}${errs}`;
+    els.extractIcon.textContent = errs ? '⚠️' : (st.finished_at ? '✅' : '🤖');
+    els.extractLabel.textContent = st.finished_at
+      ? `Terminé · ${st.done}/${st.total}${skipped}${errs}`
+      : 'Extraire (AI)';
   }
 }
 
@@ -467,7 +477,7 @@ function bindEvents() {
     if (!confirm('Lancer le robot AI ? Extraction LLM de tous les dossiers à traiter — très gourmand en ressources (plusieurs minutes par dossier).')) return;
     try {
       await fetchJSON('/api/extract', { method: 'POST' });
-      pollExtract();
+      await pollExtract();
     } catch (err) {
       console.error('Erreur de lancement de l\'extraction :', err);
       alert(err.message);
