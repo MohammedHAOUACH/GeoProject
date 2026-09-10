@@ -66,6 +66,23 @@ def test_sync_ignore_yaml_invalide_sans_planter(tmp_path):
     assert db.stats()["total"] == 1
 
 
+def test_sync_supprime_de_sqlite_un_dossier_supprime(tmp_path):
+    root = tmp_path / "projets"
+    write_project(root, "PROJ_A", {"id": "PROJ_A", "nom_projet": "Projet A"})
+    write_project(root, "PROJ_B", {"id": "PROJ_B", "nom_projet": "Projet B"})
+
+    worker, db = make_worker(tmp_path, "projets")
+    worker.sync_once()
+    assert db.stats()["total"] == 2
+
+    import shutil
+    shutil.rmtree(root / "PROJ_B")
+    worker.sync_once()
+
+    assert db.stats()["total"] == 1
+    assert db.get_project("PROJ_B") is None
+
+
 def test_needs_ai_ne_reescrit_pas_sans_llm(tmp_path):
     """Hors ligne : un project.yaml existant n'est jamais réécrit."""
     root = tmp_path / "projets"

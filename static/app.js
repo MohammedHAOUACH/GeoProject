@@ -53,6 +53,7 @@ let map = null;
 let mapReady = false;
 let detailModal = null;
 let tooltipHideTimer = null;
+let dashboardRefreshTimer = null;
 
 /* ------------------------------- utilitaires ------------------------------- */
 
@@ -258,6 +259,12 @@ async function loadPromoters() {
     els.promoteur.innerHTML = '<option value="">Tous les promoteurs</option>' +
       list.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
   } catch (err) { console.error('Erreur de chargement des promoteurs :', err); }
+}
+
+function refreshDashboard() {
+  if (document.hidden) return;
+  Promise.all([applyFilters(), refreshStats(), loadPromoters()])
+    .catch((err) => console.error('Erreur de rafraîchissement :', err));
 }
 
 /* ------------------------------- rendu listes ------------------------------ */
@@ -485,6 +492,7 @@ function bindEvents() {
   });
 
   pollExtract();  // reprend l'affichage si un job tourne déjà (rechargement de page)
+  dashboardRefreshTimer = setInterval(refreshDashboard, 5000);
 }
 
 /* ------------------------------- démarrage --------------------------------- */

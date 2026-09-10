@@ -211,6 +211,21 @@ class SyncWorker:
                     continue
         return False
 
+    def _filesystem_signature(self) -> tuple[tuple[str, int, int], ...]:
+        """Retourne une empreinte légère des dossiers et de leurs YAML."""
+        root = Path(self.cfg.app.projects_root_dir)
+        if not root.is_dir():
+            return ()
+        signature = []
+        for folder in sorted(p for p in root.iterdir() if p.is_dir()):
+            yaml_path = folder / "project.yaml"
+            try:
+                stat = yaml_path.stat()
+                signature.append((folder.name, stat.st_mtime_ns, stat.st_size))
+            except OSError:
+                signature.append((folder.name, 0, 0))
+        return tuple(signature)
+
     @staticmethod
     def _to_row(folder: Path, model: ProjectYaml) -> dict:
         gps = model.coordonnees_gps
@@ -241,15 +256,19 @@ class SyncWorker:
         """
         interval = max(1, self.cfg.app.sync_interval_minutes) * 60
         next_due = time.monotonic() + interval
+        previous_signature = self._filesystem_signature()
         while True:
             await asyncio.sleep(min(5.0, max(0.0, next_due - time.monotonic())))
+            signature_changed = self._filesystem_signature() != previous_signature
             if self._sync_requested.is_set():
                 self._sync_requested.clear()
                 await asyncio.to_thread(self.sync_once)
                 next_due = time.monotonic() + interval
-            elif time.monotonic() >= next_due:
+                previous_signature = self._filesystem_signature()
+            elif signature_changed or time.monotonic() >= next_due:
                 await asyncio.to_thread(self.sync_once)
                 next_due = time.monotonic() + interval
+                previous_signature = self._filesystem_signature()
 
     def request_sync(self) -> None:
         """Réveille la boucle de fond pour une synchronisation immédiate."""
