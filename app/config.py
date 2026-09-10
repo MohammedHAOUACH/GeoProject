@@ -33,7 +33,7 @@ class LLMAgentConfig(BaseModel):
     model: str = "gpt-4o-mini"
     temperature: float = 0.1
     # Désactive le raisonnement des modèles qui supportent ce paramètre.
-    reasoning_effort: str = "off"
+    reasoning_effort: str = "none"
     # Les serveurs locaux (LM Studio, Ollama…) peuvent être lents au premier
     # appel : chargement du modèle + raisonnement du LLM avant la réponse.
     timeout_seconds: float = 240.0

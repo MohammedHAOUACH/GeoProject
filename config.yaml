@@ -20,4 +20,4 @@ llm_agent:
   api_key: ""
   model: "gpt-4o-mini"
   temperature: 0.1
-  reasoning_effort: "off"
+  reasoning_effort: "none"
