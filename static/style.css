@@ -357,7 +357,10 @@ body {
 
   /* Navbar compacte */
   .app-navbar { min-height: 52px; }
-  .mobile-tabs { top: 52px; }
+  .mobile-tabs {
+    top: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .22);
+  }
   .stat-pill { font-size: .68rem; padding: 2px 8px; }
   #btnSync { font-size: .75rem; }
   .filter-header { padding: 16px 16px 14px; }
