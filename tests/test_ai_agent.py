@@ -135,7 +135,7 @@ def fake_llm_factory(monkeypatch):
 def _make_agent(timeout: float = 10.0) -> AIAgent:
     cfg = SimpleNamespace(
         base_url="http://localhost:1234/v1", api_key="x", model="m",
-        temperature=0.1, timeout_seconds=timeout, max_retries=0,
+        temperature=0.1, reasoning_effort="off", timeout_seconds=timeout, max_retries=0,
     )
     return AIAgent(cfg, api_key_override="x")
 
@@ -180,6 +180,7 @@ def test_extraction_passe_timeout_et_retries_au_client(tmp_path, fake_llm_factor
     call_kwargs = completions.calls[0]
     assert call_kwargs["model"] == "m"
     assert call_kwargs["temperature"] == 0.1
+    assert call_kwargs["reasoning_effort"] == "off"
     # Le prompt système demande bien le JSON strict
     assert call_kwargs["messages"][0]["role"] == "system"
     assert "JSON" in call_kwargs["messages"][0]["content"]

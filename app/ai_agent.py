@@ -232,6 +232,9 @@ class AIAgent:
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False, indent=2)},
         ]
         kwargs = {"model": self.cfg.model, "temperature": self.cfg.temperature, "messages": messages}
+        reasoning_effort = getattr(self.cfg, "reasoning_effort", "")
+        if reasoning_effort:
+            kwargs["reasoning_effort"] = reasoning_effort
         if self._json_object_supported:
             try:
                 resp = client.chat.completions.create(**kwargs, response_format={"type": "json_object"})

@@ -22,6 +22,7 @@ llm_agent:
   api_key: "lm-studio"
   model: "prism-ml/bonsai-27b"
   temperature: 0.1
+  reasoning_effort: "off"
   # Modèle local de raisonnement : 1re inférence lente (chargement + réflexion).
   timeout_seconds: 600
   max_retries: 0
