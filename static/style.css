@@ -66,7 +66,7 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 18px 18px 15px;
+  padding: 12px 18px 10px;
   background: linear-gradient(135deg, rgba(58, 110, 165, .16), rgba(24, 33, 58, .18));
   border-bottom: 1px solid var(--border);
 }
@@ -102,8 +102,8 @@ body {
   padding: 5px 9px;
   white-space: nowrap;
 }
-.filter-body { padding: 16px 18px 17px; }
-.filter-section { margin-bottom: 18px; }
+.filter-body { padding: 11px 18px 12px; }
+.filter-section { margin-bottom: 11px; }
 .filter-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
 .filter-label, .field-label {
   display: block;
@@ -127,8 +127,8 @@ body {
   align-items: center;
   gap: 6px;
   font-size: .8rem;
-  min-height: 38px;
-  padding: 7px 10px;
+  min-height: 32px;
+  padding: 5px 10px;
   border-radius: 7px;
   border: 1px solid var(--border);
   cursor: pointer;
@@ -155,8 +155,8 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  margin: 0 0 17px;
-  padding: 11px 12px;
+  margin: 0 0 10px;
+  padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: 7px;
   cursor: pointer;
@@ -166,7 +166,7 @@ body {
 .gps-copy strong { color: #d9e4fa; font-size: .78rem; font-weight: 600; }
 .gps-copy small { color: var(--muted); font-size: .68rem; }
 .gps-filter .form-check-input { margin: 0; flex: 0 0 auto; }
-.filter-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 14px; border-top: 1px solid var(--border); }
+.filter-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 .filter-action-note { color: var(--muted); font-size: .66rem; text-align: right; }
 
 /* ---------- Pastilles / badges ---------- */
