@@ -32,6 +32,12 @@ class LLMAgentConfig(BaseModel):
     api_key: str = ""
     model: str = "gpt-4o-mini"
     temperature: float = 0.1
+    # Les serveurs locaux (LM Studio, Ollama…) peuvent être lents au premier
+    # appel : chargement du modèle + raisonnement du LLM avant la réponse.
+    timeout_seconds: float = 240.0
+    # Réessais SDK désactivés : un réessai multiplierait l'attente avant le
+    # repli sur le project.yaml minimal.
+    max_retries: int = 0
 
 
 class Config(BaseModel):

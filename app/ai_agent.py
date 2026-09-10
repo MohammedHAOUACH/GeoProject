@@ -9,9 +9,13 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import socket
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 import yaml
 
@@ -42,6 +46,28 @@ SYSTEM_PROMPT = (
 )
 
 
+def parse_json_content(content: str) -> dict:
+    """Parse la réponse du LLM en objet JSON.
+
+    Tolère les clôtures markdown (```` ```json … ``` ````) et le texte
+    parasite autour de l'objet — comportement fréquent des modèles locaux.
+    """
+    text = (content or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z0-9]*\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        start, end = text.find("{"), text.rfind("}")
+        if start == -1 or end <= start:
+            raise
+        data = json.loads(text[start:end + 1])
+    if not isinstance(data, dict):
+        raise ValueError("réponse IA non structurée")
+    return data
+
+
 def derive_id(folder_name: str) -> str:
     """Génère un identifiant à partir du nom de dossier.
 
@@ -56,23 +82,78 @@ def derive_id(folder_name: str) -> str:
 class AIAgent:
     """Analyse un dossier projet et écrit/actualise son project.yaml."""
 
+    # Le serveur IA (LM Studio, Ollama…) est interrogé au plus toutes les
+    # PROBE_INTERVAL secondes quand il est indisponible (circuit breaker) :
+    # la synchronisation reste instantanée au lieu d'attendre le timeout LLM
+    # sur chaque dossier.
+    PROBE_INTERVAL = 60.0
+
     def __init__(self, cfg: LLMAgentConfig, api_key_override: str = "") -> None:
         self.cfg = cfg
         self.api_key = api_key_override or cfg.api_key
+        # Timestamp du dernier échec de sonde (None = jamais échoué). None est
+        # indispensable : time.monotonic() peut être proche de 0 après un boot,
+        # un 0.0 sentinelle bloquerait toute sonde pendant PROBE_INTERVAL.
+        self._last_failure_ts: Optional[float] = None
+        # Certains serveurs (LM Studio récent, Ollama…) rejettent
+        # response_format json_object : après un 400, ne plus le proposer.
+        self._json_object_supported: bool = True
 
     @property
     def enabled(self) -> bool:
         """L'extraction par LLM n'est active que si une clé API est configurée."""
         return bool(self.api_key)
 
+    def _server_reachable(self) -> bool:
+        """Sonde rapide (< 3 s) du serveur compatible OpenAI.
+
+        Évite d'attendre le timeout complet du LLM sur chaque dossier quand le
+        serveur (LM Studio…) est arrêté : après un échec, on ne retente une
+        vraie requête que toutes les PROBE_INTERVAL secondes.
+        """
+        if (
+            self._last_failure_ts is not None
+            and time.monotonic() - self._last_failure_ts < self.PROBE_INTERVAL
+        ):
+            return False  # récemment injoignable → échec immédiat, pas d'attente
+        target = self._host_port()
+        if target is None:
+            return True  # base_url non parsable → laisser le SDK tenter l'appel
+        host, port = target
+        try:
+            with socket.create_connection((host, port), timeout=3.0):
+                return True
+        except OSError:
+            self._last_failure_ts = time.monotonic()
+            return False
+
+    def _host_port(self) -> Optional[tuple[str, int]]:
+        """Extrait (host, port) de cfg.base_url (http://localhost:1234/v1)."""
+        parsed = urlparse(self.cfg.base_url)
+        if parsed.hostname:
+            return parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80)
+        return None
+
     # ------------------------------------------------------------------ public
 
     def process_folder(self, folder: Path) -> Path:
-        """Analyse ``folder`` et écrit son fichier project.yaml.
+        """Analyse ``folder`` et écrit/actualise son fichier project.yaml.
 
-        Ne lève jamais : en cas d'échec du LLM, un project.yaml minimal
-        (fallback) est écrit pour que le projet reste indexable.
+        Ne lève jamais :
+        - LLM indisponible ou réponse inexploitable et project.yaml existant
+          → le fichier existant est **conservé** (jamais dégradé par un
+          fallback vide) ;
+        - LLM indisponible sans project.yaml existant → écriture d'un
+          project.yaml minimal pour que le projet reste indexable.
         """
+        existing_yaml = folder / "project.yaml"
+        existing_content: Optional[str] = None
+        if existing_yaml.is_file():
+            try:
+                existing_content = existing_yaml.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                existing_content = None
+
         files = sorted(p for p in folder.iterdir() if p.is_file())
         payload = {
             "dossier": folder.name,
@@ -83,16 +164,29 @@ class AIAgent:
         }
 
         meta: Optional[ProjectYaml] = None
-        if self.enabled:
+        server_ok = self._server_reachable()
+        if self.enabled and server_ok:
+            logger.info("Extraction LLM du dossier : %s", folder.name)
             try:
                 raw = self._llm_extract(payload)
                 meta = self._normalize_meta(raw, folder.name)
+                self._last_failure_ts = None  # succès → sonde à nouveau autorisée
             except Exception as exc:  # noqa: BLE001 — l'agent ne doit jamais casser la synchro
                 logger.warning(
-                    "Extraction IA impossible pour %s : %s — repli sur métadonnées minimales",
+                    "Extraction IA impossible pour %s : %s",
                     folder.name, exc,
                 )
+        elif self.enabled and not server_ok:
+            logger.warning(
+                "Serveur IA injoignable (%s) — extraction LLM ignorée pour %s",
+                self.cfg.base_url, folder.name,
+            )
         if meta is None:
+            if existing_content is not None:
+                # Serveur IA en échec ou réponse inexploitable : on ne dégrade
+                # jamais des métadonnées existantes par un fallback vide.
+                logger.info("project.yaml existant conservé : %s", existing_yaml)
+                return existing_yaml
             meta = self._fallback_meta(folder.name)
 
         yaml_path = folder / "project.yaml"
@@ -108,19 +202,29 @@ class AIAgent:
     def _llm_extract(self, payload: dict) -> dict:
         from openai import OpenAI  # import différé : l'app fonctionne sans le SDK
 
-        client = OpenAI(base_url=self.cfg.base_url, api_key=self.api_key, timeout=90)
+        client = OpenAI(
+            base_url=self.cfg.base_url,
+            api_key=self.api_key,
+            timeout=self.cfg.timeout_seconds,
+            max_retries=self.cfg.max_retries,
+        )
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False, indent=2)},
         ]
         kwargs = {"model": self.cfg.model, "temperature": self.cfg.temperature, "messages": messages}
-        try:
-            # Certains serveurs compatibles (Ollama…) n'acceptent pas response_format.
-            resp = client.chat.completions.create(**kwargs, response_format={"type": "json_object"})
-        except Exception:
+        if self._json_object_supported:
+            try:
+                resp = client.chat.completions.create(**kwargs, response_format={"type": "json_object"})
+            except Exception:
+                # Serveur sans json_object (répond 400) → mémoriser et réessayer
+                # sans ce champ (le prompt système exige déjà un JSON strict).
+                self._json_object_supported = False
+                resp = client.chat.completions.create(**kwargs)
+        else:
             resp = client.chat.completions.create(**kwargs)
         content = resp.choices[0].message.content or "{}"
-        return json.loads(content)
+        return parse_json_content(content)
 
     def _normalize_meta(self, data: dict, folder_name: str) -> ProjectYaml:
         """Assainit la réponse du LLM puis la valide avec pydantic."""

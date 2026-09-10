@@ -15,7 +15,13 @@ app:
   db_path: "data/sqlite.db"
 
 llm_agent:
-  base_url: "https://api.openai.com/v1"
-  api_key: ""
-  model: "gpt-4o-mini"
+  # LM Studio local (serveur OpenAI-compatible démarré sur le port 1234).
+  # La clé "lm-studio" est factice mais obligatoire : elle active l'agent AI
+  # (mode hors ligne = clé vide).
+  base_url: "http://localhost:1234/v1"
+  api_key: "lm-studio"
+  model: "prism-ml/bonsai-27b"
   temperature: 0.1
+  # Modèle local de raisonnement : 1re inférence lente (chargement + réflexion).
+  timeout_seconds: 600
+  max_retries: 0

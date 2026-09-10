@@ -51,18 +51,26 @@ def create_app(config_path: Optional[str] = None) -> FastAPI:
             "Démarrage — racine projets : %s (intervalle sync : %s min)",
             config.app.projects_root_dir, config.app.sync_interval_minutes,
         )
-        # Synchro initiale garantie avant le premier appel API,
-        # puis boucle d'intervalle en arrière-plan.
-        await asyncio.to_thread(worker.sync_once)
-        task = asyncio.create_task(worker.run())
+        tasks: list[asyncio.Task] = []
+        if agent.enabled:
+            # Extraction LLM = potentiellement plusieurs minutes par dossier
+            # (modèle de raisonnement local) : synchro initiale en arrière-plan
+            # pour que le serveur réponde immédiatement.
+            logger.info("Synchro initiale en arrière-plan (agent LLM actif)")
+            tasks.append(asyncio.create_task(asyncio.to_thread(worker.sync_once)))
+        else:
+            # Hors ligne : synchro instantanée, garantie avant le 1er appel API.
+            await asyncio.to_thread(worker.sync_once)
+        tasks.append(asyncio.create_task(worker.run()))
         try:
             yield
         finally:
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+            for task in tasks:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
             db.close()
 
     app = FastAPI(

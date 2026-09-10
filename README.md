@@ -21,7 +21,10 @@ du bureau d'études, développée selon le cahier des charges
 # 2. (Optionnel) Activer l'agent AI : renseigner api_key dans config.yaml
 #    ou exporter OPENAI_API_KEY
 
-docker compose up --build
+./start.sh --docker          # build + lancement en arrière-plan, logs en direct
+./stop.sh --docker           # arrêt et suppression des conteneurs
+
+# Équivalent manuel : docker compose up --build
 # → http://localhost:8000
 ```
 
@@ -29,13 +32,28 @@ Le conteneur surveille `/data/projects` (intervalle `sync_interval_minutes`),
 génère les `project.yaml` manquants via l'agent AI et alimente le cache SQLite
 persisté dans `./data_app/`.
 
+> **Note** : quand l'agent LLM est actif, la synchro initiale tourne en
+> arrière-plan — le serveur web répond dès les premières secondes, même si
+> l'extraction des métadonnées (modèle local de raisonnement) prend plusieurs
+> minutes par dossier. La carte se garnit au fil de la synchro.
+
 ## Démarrage local (hors Docker)
+
+```bash
+./start.sh                   # crée .venv si besoin, installe les dépendances,
+                             # puis lance uvicorn --reload sur config.local.yaml
+                             # (données d'exemple fournies) → http://localhost:8000
+./stop.sh                    # arrêt propre du serveur local (SIGTERM puis SIGKILL)
+```
+
+Le fichier de configuration est choisi par `CONFIG_PATH` (défaut :
+`config.local.yaml`) : `CONFIG_PATH=config.yaml ./start.sh`.
+
+### Manuel (équivalent)
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-
-# Données d'exemple fournies :
 CONFIG_PATH=config.local.yaml uvicorn main:app --reload
 
 # Tests :
@@ -58,11 +76,38 @@ llm_agent:
   api_key: ""                           # vide = mode hors ligne
   model: "gpt-4o-mini"
   temperature: 0.1
+  timeout_seconds: 240                  # délai max par appel LLM
+  max_retries: 0                        # réessais SDK (0 = repli immédiat)
 ```
+
+### Exemple LM Studio local (`config.local.yaml`)
+
+Avec LM Studio démarré en local (onglet *Developer* → *Start Server*, port 1234) :
+
+```yaml
+llm_agent:
+  base_url: "http://localhost:1234/v1"
+  api_key: "lm-studio"                  # clé factice : active l'agent AI
+  model: "prism-ml/bonsai-27b"          # modèle chargé dans LM Studio
+  temperature: 0.1
+  timeout_seconds: 600                  # modèle local de raisonnement → appel lent
+  max_retries: 0
+```
+
+- La clé `lm-studio` est factice mais **obligatoire** : c'est elle qui active
+  l'extraction par LLM (clé vide = mode hors ligne).
+- Les modèles de raisonnement locaux peuvent mettre plusieurs minutes par
+  dossier au premier appel (chargement du modèle) : augmentez
+  `timeout_seconds` si besoin.
+- Test live de l'agent contre LM Studio : `RUN_LMSTUDIO_TESTS=1 pytest tests/test_ai_agent.py -k live`.
 
 - Sans clé API, l'application fonctionne **hors ligne** : chaque dossier sans
   `project.yaml` reçoit un fichier minimal (GPS `0.0 / 0.0`) et les fichiers
   existants ne sont jamais réécrits.
+- **Serveur IA indisponible** (LM Studio arrêté, clé API renseignée) :
+  une sonde rapide (< 3 s) détecte l'indisponibilité — la synchro n'attend plus
+  le timeout LLM sur chaque dossier, et un `project.yaml` existant n'est jamais
+  écrasé par le fallback minimal (il est conservé jusqu'au retour du serveur).
 - La variable d'environnement `OPENAI_API_KEY` prime sur `config.yaml`.
 
 ## Fonctionnement
@@ -113,6 +158,8 @@ app/            backend (config, modèles, SQLite, agent AI, synchro, routes)
 static/         dashboard frontend (index.html, app.js, style.css)
 tests/          tests unitaires et d'intégration (pytest)
 main.py         point d'entrée FastAPI
+start.sh        démarrage local (venv + uvicorn) ou Docker (--docker)
+stop.sh         arrêt local (uvicorn) ou Docker (--docker)
 config.yaml     configuration globale (montée dans le conteneur)
 Dockerfile      image python:3.11-slim + uvicorn
 docker-compose.yml
