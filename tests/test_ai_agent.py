@@ -156,7 +156,7 @@ def test_extraction_ecrit_yaml_complet(tmp_path, fake_llm_factory):
     folder = tmp_path / "PROJ_2026_003_Residence_Al_Manzah"
     _write_doc(folder, "Promoteur : Al Omr Immobilier. Casablanca.")
 
-    agent.process_folder(folder)
+    agent.process_folder(folder, use_llm=True)
     data = yaml.safe_load((folder / "project.yaml").read_text(encoding="utf-8"))
     assert data["nom_projet"] == "Résidence Al Manzah"
     assert data["promoteur"] == "Al Omr Immobilier"
@@ -171,7 +171,7 @@ def test_extraction_passe_timeout_et_retries_au_client(tmp_path, fake_llm_factor
     folder = tmp_path / "PROJ_X"
     _write_doc(folder, "doc")
 
-    agent.process_folder(folder)
+    agent.process_folder(folder, use_llm=True)
 
     client = fake_llm_factory.clients[0]
     assert client.client_kwargs["timeout"] == 600.0
@@ -192,9 +192,41 @@ def test_reponse_garbage_repli_fallback(tmp_path, fake_llm_factory):
     folder = tmp_path / "PROJ_2026_005_Complexe_Atlassia"
     _write_doc(folder, "Promoteur : Groupe Atlassia Développement. Agadir.")
 
-    agent.process_folder(folder)  # ne lève pas
+    agent.process_folder(folder, use_llm=True)  # ne lève pas
     data = yaml.safe_load((folder / "project.yaml").read_text(encoding="utf-8"))
     assert data["id"] == "PROJ_2026_005"  # dérivé du dossier
+    assert data["coordonnees_gps"] == {"latitude": 0.0, "longitude": 0.0}
+
+
+# --------------------------------------------- indexation sans LLM (use_llm=False)
+
+
+def test_indexation_ne_touch_pas_au_yaml_existant(tmp_path):
+    """use_llm=False (défaut de la synchro) : le yaml existant est conservé."""
+    agent = _make_agent()
+    folder = tmp_path / "PROJ_Y"
+    _write_doc(folder, "Promoteur : XYZ.")
+    yaml_path = folder / "project.yaml"
+    yaml_path.write_text(
+        yaml.safe_dump({"id": "PROJ_Y", "nom_projet": "Original", "promoteur": "XYZ"}),
+        encoding="utf-8",
+    )
+
+    agent.process_folder(folder)  # défaut : indexation seule
+    data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    assert data["nom_projet"] == "Original"
+    assert data["promoteur"] == "XYZ"
+
+
+def test_indexation_sans_yaml_ecrit_fallback_minimal(tmp_path):
+    """use_llm=False sans project.yaml : fallback minimal instantané."""
+    agent = _make_agent()
+    folder = tmp_path / "PROJ_2026_007_Nouveau"
+    _write_doc(folder, "Contenu.")
+
+    agent.process_folder(folder)
+    data = yaml.safe_load((folder / "project.yaml").read_text(encoding="utf-8"))
+    assert data["id"] == "PROJ_2026_007"
     assert data["coordonnees_gps"] == {"latitude": 0.0, "longitude": 0.0}
 
 
@@ -222,7 +254,7 @@ def test_serveur_down_yaml_existant_conserve(tmp_path, monkeypatch):
         encoding="utf-8",
     )
 
-    agent.process_folder(folder)  # ne lève pas
+    agent.process_folder(folder, use_llm=True)  # ne lève pas
     data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
     assert data["nom_projet"] == "Métadonnées réelles"  # conservé
     assert data["coordonnees_gps"] == {"latitude": 31.5, "longitude": -7.9}
@@ -241,7 +273,7 @@ def test_serveur_down_sans_yaml_fallback_minimal(tmp_path, monkeypatch):
     folder = tmp_path / "PROJ_2026_006_Sans_Yaml"
     _write_doc(folder, "Contenu quelconque.")
 
-    agent.process_folder(folder)  # ne lève pas
+    agent.process_folder(folder, use_llm=True)  # ne lève pas
     data = yaml.safe_load((folder / "project.yaml").read_text(encoding="utf-8"))
     assert data["id"] == "PROJ_2026_006"
     assert data["coordonnees_gps"] == {"latitude": 0.0, "longitude": 0.0}
@@ -262,7 +294,7 @@ def test_circuit_breaker_une_seule_sonde(tmp_path, monkeypatch):
     for i in range(3):
         folder = tmp_path / f"PROJ_D{i}"
         _write_doc(folder, "doc")
-        agent.process_folder(folder)
+        agent.process_folder(folder, use_llm=True)
 
     assert calls["n"] == 1  # 1re sonde puis circuit breaker (60 s)
 

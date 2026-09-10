@@ -81,3 +81,65 @@ def test_needs_ai_ne_reescrit_pas_sans_llm(tmp_path):
     worker.sync_once()
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert data["nom_projet"] == "Original"
+
+
+def test_job_extraction_ai_traite_et_indexe(tmp_path, monkeypatch):
+    """Le robot AI (manuel) extrait dossier par dossier et indexe à chaque pas."""
+    from types import SimpleNamespace
+    import app.ai_agent as mod
+
+    # Faux LLM : renvoie une métadonnée exploitable, sans réseau.
+    captured: dict = {}
+
+    class _FakeCompletions:
+        def create(self, **kwargs):
+            captured["messages"] = kwargs.get("messages")
+            message = SimpleNamespace(content='{"id": "PROJ_A", "nom_projet": "Extrait par LLM", '
+                                                '"promoteur": "LLM Corp", "statut": "en_cours", '
+                                                '"coordonnees_gps": {"latitude": 30.1, "longitude": -8.2}}')
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+    class _FakeClient:
+        def __init__(self, completions, **kwargs):
+            self.chat = SimpleNamespace(completions=completions)
+
+    monkeypatch.setattr("openai.OpenAI", lambda **kw: _FakeClient(_FakeCompletions(), **kw))
+    monkeypatch.setattr(mod.AIAgent, "_server_reachable", lambda self: True)
+
+    root = tmp_path / "projets"
+    folder = root / "PROJ_A"
+    folder.mkdir(parents=True)
+    (folder / "note.txt").write_text("Promoteur : LLM Corp.", encoding="utf-8")
+
+    worker, db = make_worker(tmp_path, "projets")
+    # make_worker désactive l'agent (api_key="") → on le réactive pour le job.
+    worker.agent.api_key = "test"
+    status = worker.start_ai_extraction()
+    assert status["running"] is True
+
+    # Attente de fin du thread (max 10 s).
+    import time as _time
+    for _ in range(100):
+        if not worker.ai_status["running"]:
+            break
+        _time.sleep(0.1)
+    assert worker.ai_status["running"] is False
+    assert worker.ai_status["done"] == 1
+    assert worker.ai_status["errors"] == []
+
+    # Le LLM a bien écrit les métadonnées, et SQLite est à jour.
+    data = yaml.safe_load((folder / "project.yaml").read_text(encoding="utf-8"))
+    assert data["promoteur"] == "LLM Corp"
+    assert db.get_project("PROJ_A")["promoteur"] == "LLM Corp"
+
+
+def test_job_extraction_ai_pas_deux_fois_en_parallele(tmp_path):
+    """Un seul job d'extraction à la fois (le 2e appel renvoie l'état courant)."""
+    root = tmp_path / "projets"
+    (root / "PROJ_A").mkdir(parents=True)
+    worker, _ = make_worker(tmp_path, "projets")
+    worker.agent.api_key = "test"
+    worker.ai_status["running"] = True  # simule un job en cours
+    status = worker.start_ai_extraction()
+    assert status["running"] is True
+    assert worker.ai_status["done"] == 0  # pas de nouveau job démarré

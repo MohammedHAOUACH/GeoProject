@@ -39,6 +39,8 @@ const els = {
   reset: $('#btnReset'),
   sync: $('#btnSync'),
   syncLabel: $('#btnSyncLabel'),
+  extract: $('#btnExtract'),
+  extractLabel: $('#btnExtractLabel'),
   list: $('#projectList'),
   count: $('#countLabel'),
   statsBar: $('#statsBar'),
@@ -357,6 +359,37 @@ function renderDetail(data) {
     </ul>`;
 }
 
+/* ------------------------- robot AI (extraction) --------------------------- */
+
+let extractTimer = null;
+
+async function pollExtract() {
+  try {
+    const st = await fetchJSON('/api/extract/status');
+    renderExtractStatus(st);
+    if (st.running) {
+      clearTimeout(extractTimer);
+      extractTimer = setTimeout(pollExtract, 2000);
+    }
+  } catch (err) { console.error('Erreur de statut extraction :', err); }
+}
+
+function renderExtractStatus(st) {
+  // Bouton masqué si l'agent AI est désactivé (pas de clé API configurée).
+  els.extract.classList.toggle('d-none', !st.enabled);
+  if (!st.enabled) return;
+  if (st.running) {
+    els.extract.disabled = true;
+    const cur = st.current ? ` — ${esc(st.current)}` : '';
+    els.extractLabel.textContent = `🤖 ${st.done}/${st.total}${cur}`;
+  } else {
+    els.extract.disabled = false;
+    const skipped = st.skipped ? ` · ${st.skipped} ignoré${st.skipped > 1 ? 's' : ''}` : '';
+    const errs = st.errors && st.errors.length ? ` · ${st.errors.length} erreur${st.errors.length > 1 ? 's' : ''}` : '';
+    els.extractLabel.textContent = `🤖 Extraire (AI) · ${st.done}/${st.total}${skipped}${errs}`;
+  }
+}
+
 function resetFilters() {
   state.filters = { q: '', statuts: new Set(), promoteur: '', etape: '', hasGps: false };
   els.search.value = '';
@@ -418,16 +451,30 @@ function bindEvents() {
 
   els.sync.addEventListener('click', async () => {
     els.sync.disabled = true;
-    els.syncLabel.textContent = 'Synchronisation…';
+    els.syncLabel.textContent = 'Réindexation…';
     try {
       await fetchJSON('/api/sync', { method: 'POST' });
       await Promise.all([applyFilters(), refreshStats(), loadPromoters()]);
-    } catch (err) { console.error('Erreur de synchronisation :', err); }
+    } catch (err) { console.error('Erreur de réindexation :', err); }
     finally {
       els.sync.disabled = false;
-      els.syncLabel.textContent = '⟳ Synchroniser';
+      els.syncLabel.textContent = '⟳ Réindexer';
     }
   });
+
+  // Robot AI (gourmand) : lancé uniquement au clic, progression en direct.
+  els.extract.addEventListener('click', async () => {
+    if (!confirm('Lancer le robot AI ? Extraction LLM de tous les dossiers à traiter — très gourmand en ressources (plusieurs minutes par dossier).')) return;
+    try {
+      await fetchJSON('/api/extract', { method: 'POST' });
+      pollExtract();
+    } catch (err) {
+      console.error('Erreur de lancement de l\'extraction :', err);
+      alert(err.message);
+    }
+  });
+
+  pollExtract();  // reprend l'affichage si un job tourne déjà (rechargement de page)
 }
 
 /* ------------------------------- démarrage --------------------------------- */

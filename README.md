@@ -32,10 +32,10 @@ Le conteneur surveille `/data/projects` (intervalle `sync_interval_minutes`),
 génère les `project.yaml` manquants via l'agent AI et alimente le cache SQLite
 persisté dans `./data_app/`.
 
-> **Note** : quand l'agent LLM est actif, la synchro initiale tourne en
-> arrière-plan — le serveur web répond dès les premières secondes, même si
-> l'extraction des métadonnées (modèle local de raisonnement) prend plusieurs
-> minutes par dossier. La carte se garnit au fil de la synchro.
+> **Note** : la synchronisation du démarrage et le bouton **⟳ Réindexer**
+> sont **rapides et sans LLM** (lecture des `project.yaml` → SQLite). Le robot
+> AI, très gourmand en ressources, est volontairement lancé **à la main**
+> (bouton **🤖 Extraire (AI)** ou `POST /api/extract`).
 
 ## Démarrage local (hors Docker)
 
@@ -124,11 +124,19 @@ projects/PROJ_2026_001_Tour_Alpha/`). Pour pointer vers un serveur de fichiers
 externe, renseignez `app.projects_base_url` dans `config.yaml` — l'API renvoie
 alors le champ `folder_url` correspondant.
 
-1. Le worker de fond scanne la racine projets et détecte les dossiers sans
-   `project.yaml` ou dont les fichiers sont plus récents que celui-ci.
-2. L'agent AI lit l'arborescence et les extraits texte (PDF / Word / txt),
-   extrait les métadonnées (nom, promoteur, statut, GPS, réf. administrative…)
-   et écrit/actualise `project.yaml`.
+1. **Indexation** (démarrage, intervalle configuré, bouton **⟳ Réindexer**) :
+   le worker scanne la racine projets, lit chaque `project.yaml` existant et
+   met à jour le cache SQLite — instantané, sans LLM. Un dossier sans
+   `project.yaml` reçoit un fichier minimal (GPS `0.0 / 0.0`) pour rester
+   indexable ; les yaml existants ne sont jamais réécrits par l'indexation.
+2. **Extraction AI — manuelle uniquement** : le robot LLM lit l'arborescence
+   et les extraits texte (PDF / Word / txt) de chaque dossier à traiter,
+   extrait les métadonnées (nom, promoteur, statut, GPS, réf.
+   administrative…) et écrit/actualise `project.yaml`. Très gourmand
+   (modèle de raisonnement local : plusieurs minutes par dossier), il se
+   lance via le bouton **🤖 Extraire (AI)** (`POST /api/extract`), avec
+   progression en direct (`GET /api/extract/status`), ou en CLI :
+   `python run_local_pipeline.py --agent <DOSSIER>`.
 3. Chaque `project.yaml` **valide** (pydantic) est mis en cache dans SQLite ;
    un fichier malformé est ignoré et consigné dans les logs sans interrompre
    l'application.
@@ -140,7 +148,9 @@ alors le champ `folder_url` correspondant.
 | `GET /api/projects` | Projets filtrés (`q`, `statut` répétable, `promoteur`, `etape`, `has_gps`) |
 | `GET /api/projects/{id}` | Fiche projet + liste des fichiers de son dossier |
 | `GET /api/promoters` | Promoteurs uniques (filtre déroulant) |
-| `POST /api/sync` | Force la resynchronisation immédiate |
+| `POST /api/sync` | Réindexation rapide project.yaml → SQLite (sans LLM) |
+| `POST /api/extract` | Lance le robot AI (LLM, gourmand) — manuel, en arrière-plan |
+| `GET /api/extract/status` | Progression du job d'extraction AI |
 | `GET /api/stats` | Nombre de projets groupés par statut |
 
 Logique de filtrage : **ET** entre les critères, **OU** au sein d'un même filtre

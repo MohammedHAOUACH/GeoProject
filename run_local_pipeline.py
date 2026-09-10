@@ -27,7 +27,7 @@ print(f"Agent activé : {agent.enabled} | base_url={agent.cfg.base_url} | "
 if args.agent:
     folder = Path(cfg.app.projects_root_dir) / args.agent
     t0 = time.time()
-    agent.process_folder(folder)
+    agent.process_folder(folder, use_llm=True)
     print(f"OK en {time.time() - t0:.1f}s → {folder / 'project.yaml'}", flush=True)
     print((folder / "project.yaml").read_text(encoding="utf-8"), flush=True)
 else:

@@ -43,7 +43,17 @@ def parse_project_yaml(path: Path) -> ProjectYaml | None:
 
 
 class SyncWorker:
-    """Surveille /data/projects, fait appel à l'agent AI, met à jour SQLite."""
+    """Surveille /data/projects, indexe les project.yaml dans SQLite.
+
+    Deux opérations bien séparées :
+    - **Indexation** (``sync_once``) : lit les project.yaml existants → SQLite.
+      Rapide, sans LLM — c'est la synchro du démarrage et du bouton ⟳.
+      Un dossier sans project.yaml reçoit un fichier minimal pour rester
+      indexable (jamais d'appel LLM automatique).
+    - **Extraction AI** (``start_ai_extraction``) : le robot LLM, très gourmand,
+      lancé UNIQUEMENT à la demande (bouton 🤖 / CLI). Traite les dossiers un
+      par un et met SQLite à jour après chaque dossier (progression visible).
+    """
 
     def __init__(self, cfg: Config, db: Database, agent: AIAgent) -> None:
         self.cfg = cfg
@@ -52,6 +62,67 @@ class SyncWorker:
         self._lock = threading.Lock()
         self._sync_requested = threading.Event()
         self.last_result: dict = {}
+        # État du job d'extraction AI (lancé manuellement).
+        self._ai_lock = threading.Lock()
+        self.ai_status: dict = {"running": False, "done": 0, "total": 0}
+
+    def start_ai_extraction(self) -> dict:
+        """Démarre l'extraction LLM en arrière-plan (thread). Déjà en cours → état actuel."""
+        with self._ai_lock:
+            if self.ai_status.get("running"):
+                return self.ai_status
+            self.ai_status = {
+                "running": True,
+                "done": 0,
+                "total": 0,
+                "current": None,
+                "started_at": datetime.now(timezone.utc).isoformat(),
+                "finished_at": None,
+                "errors": [],
+                "skipped": 0,
+            }
+        thread = threading.Thread(target=self._ai_job, name="ai-extraction", daemon=True)
+        thread.start()
+        return self.ai_status
+
+    def _ai_job(self) -> None:
+        """Corps du job (thread) : extraction LLM dossier par dossier.
+
+        Les dossiers dont les fichiers n'ont pas changé depuis leur
+        project.yaml valide sont ignorés (``_needs_ai``) : cliquer deux fois
+        ne relance pas toute l'extraction pour rien.
+        """
+        try:
+            root = Path(self.cfg.app.projects_root_dir)
+            folders = sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
+            with self._ai_lock:
+                self.ai_status["total"] = len(folders)
+            for folder in folders:
+                with self._ai_lock:
+                    self.ai_status["current"] = folder.name
+                try:
+                    if not self._needs_ai(folder):
+                        with self._ai_lock:
+                            self.ai_status["skipped"] += 1
+                            self.ai_status["done"] += 1
+                        continue
+                    self.agent.process_folder(folder, use_llm=True)
+                except Exception as exc:  # noqa: BLE001 — un dossier en échec ne stoppe pas le job
+                    logger.exception("Extraction AI : échec du dossier %s : %s", folder.name, exc)
+                    with self._ai_lock:
+                        self.ai_status["errors"].append(
+                            {"folder": folder.name, "error": str(exc)}
+                        )
+                # SQLite à jour après CHAQUE dossier → progression visible sur la carte.
+                self.sync_once()
+                with self._ai_lock:
+                    self.ai_status["done"] += 1
+        finally:
+            with self._ai_lock:
+                self.ai_status["running"] = False
+                self.ai_status["current"] = None
+                self.ai_status["finished_at"] = datetime.now(timezone.utc).isoformat()
+            logger.info("Extraction AI terminée : %s", self.ai_status)
 
     # ------------------------------------------------------------- synchronisation
 
@@ -85,20 +156,15 @@ class SyncWorker:
 
         folders = sorted(p for p in root.iterdir() if p.is_dir())
         rows: list[dict] = []
-        ai_generated = 0
         errors = 0
 
         for folder in folders:
             try:
-                if self._needs_ai(folder):
-                    self.agent.process_folder(folder)
-                    ai_generated += 1
+                # Indexation seule : jamais d'appel LLM ici (la synchro doit
+                # rester instantanée). Un dossier sans project.yaml reçoit un
+                # fichier minimal ; les yaml existants ne sont pas réécrits.
+                self.agent.process_folder(folder)
                 yaml_path = folder / "project.yaml"
-                if not yaml_path.exists():
-                    # L'agent (même sans LLM) garantit un project.yaml minimal.
-                    self.agent.process_folder(folder)
-                    ai_generated += 1
-                    yaml_path = folder / "project.yaml"
                 model = parse_project_yaml(yaml_path)
                 if model is not None:
                     rows.append(self._to_row(folder, model))
@@ -114,7 +180,6 @@ class SyncWorker:
             "status": "ok",
             "dossiers_scannes": len(folders),
             "projets_indexes": len(rows),
-            "yaml_generes_par_agent": ai_generated,
             "erreurs": errors,
             "derniere_sync": self._last_sync.isoformat(),
         }

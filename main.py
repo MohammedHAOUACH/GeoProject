@@ -52,15 +52,9 @@ def create_app(config_path: Optional[str] = None) -> FastAPI:
             config.app.projects_root_dir, config.app.sync_interval_minutes,
         )
         tasks: list[asyncio.Task] = []
-        if agent.enabled:
-            # Extraction LLM = potentiellement plusieurs minutes par dossier
-            # (modèle de raisonnement local) : synchro initiale en arrière-plan
-            # pour que le serveur réponde immédiatement.
-            logger.info("Synchro initiale en arrière-plan (agent LLM actif)")
-            tasks.append(asyncio.create_task(asyncio.to_thread(worker.sync_once)))
-        else:
-            # Hors ligne : synchro instantanée, garantie avant le 1er appel API.
-            await asyncio.to_thread(worker.sync_once)
+        # Synchro d'indexation au démarrage : rapide et sans LLM (le robot AI
+        # est volontairement lancé à la main, cf. POST /api/extract).
+        await asyncio.to_thread(worker.sync_once)
         tasks.append(asyncio.create_task(worker.run()))
         try:
             yield

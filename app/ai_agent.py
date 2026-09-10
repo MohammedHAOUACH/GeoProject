@@ -136,10 +136,16 @@ class AIAgent:
 
     # ------------------------------------------------------------------ public
 
-    def process_folder(self, folder: Path) -> Path:
+    def process_folder(self, folder: Path, use_llm: bool = False) -> Path:
         """Analyse ``folder`` et écrit/actualise son fichier project.yaml.
 
-        Ne lève jamais :
+        ``use_llm=False`` (défaut) : **indexation seule** — écrit un fallback
+        minimal uniquement si le dossier n'a pas encore de project.yaml. Les
+        métadonnées existantes ne sont jamais réécrites : l'indexation reste
+        instantanée (le serveur web n'est jamais ralenti par le LLM).
+
+        ``use_llm=True`` : extraction complète par le LLM (appel manuel,
+        très gourmand —cf. bouton 🤖 de l'interface). Ne lève jamais :
         - LLM indisponible ou réponse inexploitable et project.yaml existant
           → le fichier existant est **conservé** (jamais dégradé par un
           fallback vide) ;
@@ -153,6 +159,19 @@ class AIAgent:
                 existing_content = existing_yaml.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 existing_content = None
+
+        if not use_llm:
+            # Indexation seule : ne touche jamais à un project.yaml existant.
+            if existing_content is not None:
+                return existing_yaml
+            meta = self._fallback_meta(folder.name)
+            yaml_path = existing_yaml
+            yaml_path.write_text(
+                yaml.safe_dump(meta.model_dump(mode="json"), allow_unicode=True, sort_keys=False),
+                encoding="utf-8",
+            )
+            logger.info("project.yaml minimal écrit (indexation) : %s", yaml_path)
+            return yaml_path
 
         files = sorted(p for p in folder.iterdir() if p.is_file())
         payload = {

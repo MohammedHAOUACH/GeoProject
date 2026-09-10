@@ -16,8 +16,11 @@
         <span class="brand-dot"></span>SamaConcept <span class="brand-sub">GeoProjects</span>
       </a>
       <div class="d-flex align-items-center gap-2 ms-auto flex-wrap" id="statsBar" aria-label="Statistiques"></div>
-      <button class="btn btn-outline-light btn-sm ms-2" id="btnSync" title="Forcer la resynchronisation project.yaml → SQLite">
-        <span id="btnSyncLabel">⟳ Synchroniser</span>
+      <button class="btn btn-outline-light btn-sm ms-2" id="btnSync" title="Réindexer les project.yaml dans SQLite (rapide, sans LLM)">
+        <span id="btnSyncLabel">⟳ Réindexer</span>
+      </button>
+      <button class="btn btn-warning btn-sm ms-2 d-none" id="btnExtract" title="Robot AI (LLM) : extraction des métadonnées — très gourmand en ressources">
+        <span id="btnExtractLabel">🤖 Extraire (AI)</span>
       </button>
     </div>
   </nav>
