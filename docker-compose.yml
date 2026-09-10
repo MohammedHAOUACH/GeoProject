@@ -1,0 +1,17 @@
+services:
+  samaconcept-geoprojects:
+    build: .
+    container_name: samaconcept_app
+    ports:
+      - "8000:8000"
+    volumes:
+      # Dossier principal contenant tous les répertoires de projets
+      - /chemin/local/projets:/data/projects
+      # Persistance de la BDD SQLite et de la configuration
+      - ./data_app:/app/data
+      - ./config.yaml:/app/config.yaml:ro
+    restart: always
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Optionnel : clé API pour l'agent AI (sinon config.yaml)
+      # - OPENAI_API_KEY=${OPENAI_API_KEY:-}

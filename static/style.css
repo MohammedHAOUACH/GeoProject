@@ -1,0 +1,280 @@
+/* SamaConcept · GeoProjects — thème sombre */
+:root {
+  --bg: #0b1020;
+  --panel: #131a2e;
+  --panel-2: #18213a;
+  --border: #24304d;
+  --text: #e8eefc;
+  --muted: #8fa0c4;
+  --accent: #3a6ea5;
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+/* ---------- Barre de navigation ---------- */
+.app-navbar {
+  background: #0d1326;
+  border-bottom: 1px solid var(--border);
+  min-height: 57px;
+}
+.brand-dot {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3a6ea5, #7c5cff);
+  margin-right: 8px;
+  vertical-align: middle;
+}
+.brand-sub { color: var(--muted); font-weight: 300; }
+.stat-pill {
+  font-size: .75rem;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 3px 10px;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  white-space: nowrap;
+}
+#btnSync { white-space: nowrap; }
+
+/* ---------- Layout ---------- */
+.app-main { height: calc(100vh - 57px); }
+.row { height: 100%; }
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  height: 100%;
+  min-height: 0;
+}
+.filters { border-bottom: 1px solid var(--border); }
+.filter-title {
+  text-transform: uppercase;
+  font-size: .72rem;
+  letter-spacing: .12em;
+  color: var(--muted);
+}
+
+/* ---------- Chips de statut ---------- */
+.statut-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .8rem;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  color: var(--text);
+}
+.statut-chip:has(input:checked) {
+  border-color: var(--chip-color);
+  box-shadow: 0 0 0 1px var(--chip-color) inset;
+}
+.statut-chip input { accent-color: var(--chip-color); }
+.statut-chip[data-statut="devis"]     { --chip-color: #f5c518; }
+.statut-chip[data-statut="en_cours"]  { --chip-color: #2196f3; }
+.statut-chip[data-statut="finalise"]  { --chip-color: #4caf50; }
+.statut-chip[data-statut="livre"]     { --chip-color: #26a69a; }
+
+/* ---------- Pastilles / badges ---------- */
+.dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+}
+.dot-devis     { background: #f5c518; }
+.dot-en_cours  { background: #2196f3; }
+.dot-finalise  { background: #4caf50; }
+.dot-livre     { background: #26a69a; }
+.dot-all       { background: #e8eefc; }
+
+.badge-devis    { background: #f5c518; color: #3a2b00; }
+.badge-en_cours { background: #2196f3; color: #fff; }
+.badge-finalise { background: #4caf50; color: #fff; }
+.badge-livre    { background: #26a69a; color: #fff; }
+
+/* ---------- Cartes projets ---------- */
+.project-list { padding: .75rem; }
+.project-card {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.project-card:hover { border-color: var(--accent); background: #1b2542; }
+.project-card.active {
+  border-color: #4f8cd6;
+  background: #1e2a4d;
+  box-shadow: 0 0 0 1px #4f8cd6;
+}
+.card-title { font-weight: 600; font-size: .95rem; }
+.card-meta { font-size: .8rem; color: var(--muted); margin-top: 4px; }
+.card-etape { font-size: .75rem; color: #a9b7d9; margin-top: 4px; }
+.card-nogps { font-size: .7rem; color: #d9a441; margin-top: 4px; }
+.empty-state {
+  color: var(--muted);
+  text-align: center;
+  padding: 2rem 1rem;
+  font-size: .85rem;
+}
+
+/* ---------- Carte ---------- */
+.map-panel { background: #080c16; }
+#map { position: absolute; inset: 0; }
+
+/* Contrôles MapLibre en thème sombre */
+.maplibregl-ctrl-group { border-radius: 8px; overflow: hidden; }
+.maplibregl-ctrl-attrib {
+  font-size: 10px;
+  background: rgba(13, 19, 38, .8);
+  color: var(--muted);
+}
+.maplibregl-ctrl-attrib a { color: var(--accent); }
+
+/* ---------- Infobulle (cliquable) ---------- */
+.map-tooltip {
+  position: fixed;
+  z-index: 60;
+  pointer-events: auto;  /* permet de cliquer sur le lien du dossier */
+  background: rgba(10, 16, 32, .95);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: .78rem;
+  max-width: 280px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .5);
+}
+.tt-title { font-weight: 600; color: #fff; margin-bottom: 2px; }
+.tt-line { color: var(--muted); }
+.tt-etape { color: #a9b7d9; font-style: italic; }
+.tt-folder {
+  display: block;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  color: #7fb2ff;
+  text-decoration: none;
+  word-break: break-all;
+}
+.tt-folder:hover { color: #a9ccff; text-decoration: underline; }
+
+.map-legend {
+  position: absolute;
+  left: 14px; bottom: 14px;
+  display: flex;
+  gap: 14px;
+  font-size: .72rem;
+  color: var(--muted);
+  background: rgba(10, 16, 32, .75);
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  z-index: 10;
+}
+
+/* ---------- Modal détail ---------- */
+.modal-content { background: var(--panel); color: var(--text); border: 1px solid var(--border); }
+.modal-header { border-bottom: 1px solid var(--border); }
+.btn-close { filter: invert(1); }
+.detail-table { margin-bottom: 0; }
+.detail-table th { color: var(--muted); font-weight: 500; width: 38%; padding-left: 0; }
+.detail-table td { color: var(--text); }
+.detail-table td a {
+  color: #7fb2ff;
+  word-break: break-all;
+  text-decoration: none;
+}
+.detail-table td a:hover { color: #a9ccff; text-decoration: underline; }
+.file-list { margin-top: .5rem; }
+.file-list .list-group-item {
+  background: var(--panel-2);
+  border-color: var(--border);
+  color: var(--text);
+  font-size: .8rem;
+  padding: .5rem .75rem;
+}
+.file-name { word-break: break-all; }
+.file-size { white-space: nowrap; margin-left: 8px; }
+
+/* ---------- Formulaires ---------- */
+.form-control, .form-select {
+  background: #0d1326;
+  border-color: var(--border);
+  color: var(--text);
+}
+.form-control::placeholder { color: #5a6a8f; }
+.form-control:focus, .form-select:focus {
+  background: #0d1326;
+  color: var(--text);
+  border-color: var(--accent);
+  box-shadow: none;
+}
+.form-check-input { background-color: #0d1326; border-color: var(--border); }
+.form-check-input:checked { background-color: var(--accent); border-color: var(--accent); }
+
+/* ---------- Onglets mobile ---------- */
+.mobile-tabs {
+  display: flex;
+  position: sticky;
+  top: 57px;
+  z-index: 30;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.mobile-tabs .tab-btn {
+  flex: 1;
+  padding: .6rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-size: .85rem;
+}
+.mobile-tabs .tab-btn.active {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 991.98px) {
+  body { overflow: auto; }
+  .app-main { height: auto; }
+  .row { height: auto; }
+
+  /* Un seul panneau visible à la fois */
+  body.tab-map .sidebar { display: none; }
+  body.tab-projects #mapPanel { display: none; }
+  body.tab-projects .sidebar {
+    height: auto;
+    max-height: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  body.tab-map .map-panel {
+    min-height: calc(100vh - 57px - 44px);
+  }
+
+  /* Infobulle : ne dépasse jamais de l'écran */
+  .map-tooltip { max-width: calc(100vw - 24px); }
+
+  /* Navbar compacte */
+  .app-navbar { min-height: 52px; }
+  .mobile-tabs { top: 52px; }
+  .stat-pill { font-size: .68rem; padding: 2px 8px; }
+  #btnSync { font-size: .75rem; }
+}

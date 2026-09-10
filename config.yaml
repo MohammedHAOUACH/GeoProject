@@ -1,0 +1,22 @@
+# SamaConcept · GeoProjects — configuration globale
+# Monté dans le conteneur : ./config.yaml:/app/config.yaml:ro
+
+app:
+  projects_root_dir: "/data/projects"
+  # Optionnel : URL de base des dossiers projets si servis par un serveur
+  # externe (ex : "http://192.168.1.50:8080/data/projects").
+  # Vide (défaut) = les dossiers sont servis par l'application elle-même
+  # sous /projects (lien auto : https://<serveur>/projects/<dossier>/).
+  projects_base_url: ""
+  sync_interval_minutes: 15
+  host: "0.0.0.0"
+  port: 8000
+  db_path: "data/sqlite.db"
+
+llm_agent:
+  # Compatible OpenAI (GPT-4o, Ollama, vLLM, LM Studio…).
+  # Laisser api_key vide pour fonctionner hors ligne (project.yaml minimal).
+  base_url: "https://api.openai.com/v1"
+  api_key: ""
+  model: "gpt-4o-mini"
+  temperature: 0.1

@@ -1,0 +1,11 @@
+id: PROJ_2026_001
+nom_projet: Résidence Tour Alpha
+ref_administrative: PERMIS-BUILD-2026-88
+promoteur: Groupe Immobilier Horizon
+adresse: 12 Avenue Hassan II, Tanger
+coordonnees_gps:
+  latitude: 35.7796
+  longitude: -5.8037
+statut: en_cours
+etape_actuelle: Étude de structure
+derniere_mise_a_jour: "2026-09-10T10:00:00Z"

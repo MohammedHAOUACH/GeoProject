@@ -1,0 +1,120 @@
+# SamaConcept · GeoProjects
+
+Application web **100 % conteneurisée** de cartographie et de recherche des projets
+du bureau d'études, développée selon le cahier des charges
+[`plan de traville.md`](plan%20de%20traville.md).
+
+| Composant | Technologie |
+| --- | --- |
+| Frontend | HTML5 / Bootstrap 5 + MapLibre GL (carte vectorielle OpenFreeMap/OSM) |
+| Backend | Python 3.11 / FastAPI |
+| Extraction AI | Client OpenAI-compatible (GPT-4o, Ollama, vLLM, LM Studio) |
+| Cache | SQLite (lecture rapide, indexée) |
+| Déploiement | Docker & Docker Compose |
+
+## Démarrage rapide (Docker)
+
+```bash
+# 1. Pointer le dossier des projets dans docker-compose.yml
+#    (volume /chemin/local/projets:/data/projects)
+
+# 2. (Optionnel) Activer l'agent AI : renseigner api_key dans config.yaml
+#    ou exporter OPENAI_API_KEY
+
+docker compose up --build
+# → http://localhost:8000
+```
+
+Le conteneur surveille `/data/projects` (intervalle `sync_interval_minutes`),
+génère les `project.yaml` manquants via l'agent AI et alimente le cache SQLite
+persisté dans `./data_app/`.
+
+## Démarrage local (hors Docker)
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+
+# Données d'exemple fournies :
+CONFIG_PATH=config.local.yaml uvicorn main:app --reload
+
+# Tests :
+pytest -q
+```
+
+## Configuration (`config.yaml`)
+
+```yaml
+app:
+  projects_root_dir: "/data/projects"   # dossier racine des projets
+  projects_base_url: ""                 # optionnel : URL externe des dossiers
+                                        # (ex : http://192.168.1.50:8080/data/projects).
+                                        # Vide = servis par l'app via /projects
+  sync_interval_minutes: 15             # intervalle du worker de fond
+  db_path: "data/sqlite.db"             # cache SQLite
+
+llm_agent:
+  base_url: "https://api.openai.com/v1" # compatible OpenAI (Ollama, vLLM, LM Studio…)
+  api_key: ""                           # vide = mode hors ligne
+  model: "gpt-4o-mini"
+  temperature: 0.1
+```
+
+- Sans clé API, l'application fonctionne **hors ligne** : chaque dossier sans
+  `project.yaml` reçoit un fichier minimal (GPS `0.0 / 0.0`) et les fichiers
+  existants ne sont jamais réécrits.
+- La variable d'environnement `OPENAI_API_KEY` prime sur `config.yaml`.
+
+## Fonctionnement
+
+La vue est une **carte vectorielle** (tuiles OpenStreetMap via OpenFreeMap,
+sans clé API — nette à tous les niveaux de zoom, centrée sur le Maroc).
+L'interface est **responsive** : sur téléphone, deux onglets « 🗺 Carte » et
+« 📋 Projets & filtres » remplacent le panneau latéral.
+
+Chaque projet affiche un **lien cliquable vers son dossier** : les dossiers
+sont servis en lecture seule par l'application sous `/projects` (lien auto-
+dérivé de l'adresse utilisée par le navigateur, ex. `http://192.168.1.50:8000/
+projects/PROJ_2026_001_Tour_Alpha/`). Pour pointer vers un serveur de fichiers
+externe, renseignez `app.projects_base_url` dans `config.yaml` — l'API renvoie
+alors le champ `folder_url` correspondant.
+
+1. Le worker de fond scanne la racine projets et détecte les dossiers sans
+   `project.yaml` ou dont les fichiers sont plus récents que celui-ci.
+2. L'agent AI lit l'arborescence et les extraits texte (PDF / Word / txt),
+   extrait les métadonnées (nom, promoteur, statut, GPS, réf. administrative…)
+   et écrit/actualise `project.yaml`.
+3. Chaque `project.yaml` **valide** (pydantic) est mis en cache dans SQLite ;
+   un fichier malformé est ignoré et consigné dans les logs sans interrompre
+   l'application.
+
+## API REST
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /api/projects` | Projets filtrés (`q`, `statut` répétable, `promoteur`, `etape`, `has_gps`) |
+| `GET /api/projects/{id}` | Fiche projet + liste des fichiers de son dossier |
+| `GET /api/promoters` | Promoteurs uniques (filtre déroulant) |
+| `POST /api/sync` | Force la resynchronisation immédiate |
+| `GET /api/stats` | Nombre de projets groupés par statut |
+
+Logique de filtrage : **ET** entre les critères, **OU** au sein d'un même filtre
+(ex. `GET /api/projects?q=Horizon&statut=en_cours&statut=devis&has_gps=true`).
+
+## Données d'exemple
+
+`sample_projects/` contient 4 projets prêts à l'emploi (Tanger, Rabat,
+Casablanca, Fès). En local : `CONFIG_PATH=config.local.yaml`.
+
+## Structure du dépôt
+
+```
+app/            backend (config, modèles, SQLite, agent AI, synchro, routes)
+static/         dashboard frontend (index.html, app.js, style.css)
+tests/          tests unitaires et d'intégration (pytest)
+main.py         point d'entrée FastAPI
+config.yaml     configuration globale (montée dans le conteneur)
+Dockerfile      image python:3.11-slim + uvicorn
+docker-compose.yml
+sample_projects/  projets d'exemple
+```
