@@ -248,14 +248,18 @@ class AIAgent:
 
         patterns = {
             "nom_projet": r"(?:projet|project|nom)\s*:\s*(.+)",
-            "adresse": r"(?:adresse|site|lieu)\s*:\s*(.+)",
+            "adresse": r"(?:adresse|site|lieu|situation)\s*:\s*(.+)",
             "promoteur": r"(?:promoteur|client|ma[iî]tre\s+d['’]ouvrage)\s*:\s*(.+)",
             "ref_administrative": r"(?:r[ée]f(?:[ée]rence)?|permis)\s*:\s*(.+)",
             "etape_actuelle": r"(?:[ée]tape|phase)\s*:\s*(.+)",
         }
         for field, pattern in patterns.items():
             match = re.search(pattern, text, re.IGNORECASE)
-            if match and (field not in provided_fields or not base.get(field)):
+            generated_name = folder.name.replace("_", " ").strip()
+            can_fill = field not in provided_fields or not base.get(field)
+            if field == "nom_projet" and base.get(field) == generated_name:
+                can_fill = True
+            if match and can_fill:
                 base[field] = match.group(1).strip()
 
         gps = base.get("coordonnees_gps") or {}
@@ -369,9 +373,40 @@ class AIAgent:
         from pypdf import PdfReader
 
         reader = PdfReader(str(path))
-        return "\n".join(
+        text = "\n".join(
             (page.extract_text() or "") for page in reader.pages[:max_pages]
         )
+        if len(text.strip()) >= 20:
+            return text
+        return AIAgent._pdf_ocr(path, max_pages=max_pages)
+
+    @staticmethod
+    def _pdf_ocr(path: Path, max_pages: int = 3) -> str:
+        """OCR optionnel des PDF scannés, page par page."""
+        try:
+            import fitz
+            import pytesseract
+            from PIL import Image
+        except ImportError as exc:
+            logger.warning("OCR indisponible pour %s : dépendance manquante (%s)", path.name, exc)
+            return ""
+
+        document = fitz.open(str(path))
+        texts: list[str] = []
+        try:
+            for page in document[:max_pages]:
+                pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+                image = Image.frombytes("RGB", [pixmap.width, pixmap.height], pixmap.samples)
+                try:
+                    texts.append(pytesseract.image_to_string(image, lang="fra+eng"))
+                except pytesseract.TesseractNotFoundError as exc:
+                    logger.warning("Moteur Tesseract absent pour %s : %s", path.name, exc)
+                    return ""
+                except pytesseract.TesseractError:
+                    texts.append(pytesseract.image_to_string(image, lang="eng"))
+        finally:
+            document.close()
+        return "\n".join(texts)
 
     @staticmethod
     def _docx_text(path: Path) -> str:

@@ -56,9 +56,15 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 CONFIG_PATH=config.local.yaml uvicorn main:app --reload
 
+# `start.sh` installe automatiquement Tesseract si nécessaire :
+# macOS : Homebrew ; Linux : apt/dnf/pacman ; Windows : winget/Chocolatey.
+
 # Tests :
 pytest -q
 ```
+
+Avec Docker, Tesseract et les langues française/anglaise sont installés
+automatiquement par le `Dockerfile`.
 
 ## Configuration (`config.yaml`)
 
