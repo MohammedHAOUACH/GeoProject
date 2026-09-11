@@ -20,7 +20,7 @@ const OPENFREEMAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 // Vue initiale centrée sur le Maroc (Tanger, Rabat, Casablanca, Fès).
 const MOROCCO_CENTER = [-6.4, 33.7];
 const MOROCCO_ZOOM = 6.5;
-const PROJECT_ZOOM = 10;
+const PROJECT_ZOOM = 6;
 
 const state = {
   filters: { q: '', statuts: new Set(), promoteur: '', etape: '', hasGps: false },

@@ -163,22 +163,7 @@ body {
 .statut-chip[data-statut="en_cours"]  { --chip-color: #2196f3; }
 .statut-chip[data-statut="finalise"]  { --chip-color: #4caf50; }
 .statut-chip[data-statut="livre"]     { --chip-color: #26a69a; }
-.gps-filter {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin: 0 0 10px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  cursor: pointer;
-  background: rgba(13, 19, 38, .45);
-}
-.gps-copy { display: flex; flex-direction: column; gap: 3px; }
-.gps-copy strong { color: #d9e4fa; font-size: .78rem; font-weight: 600; }
-.gps-copy small { color: var(--muted); font-size: .68rem; }
-.gps-filter .form-check-input { margin: 0; flex: 0 0 auto; }
+.gps-chip { --chip-color: #7fb2ff; }
 .filter-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 .filter-action-note { color: var(--muted); font-size: .66rem; text-align: right; }
 

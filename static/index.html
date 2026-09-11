@@ -66,6 +66,10 @@
                 <label class="statut-chip" data-statut="en_cours"><input type="checkbox" value="en_cours"><span class="status-dot"></span> En cours</label>
                 <label class="statut-chip" data-statut="finalise"><input type="checkbox" value="finalise"><span class="status-dot"></span> Finalisé</label>
                 <label class="statut-chip" data-statut="livre"><input type="checkbox" value="livre"><span class="status-dot"></span> Livré</label>
+                <label class="statut-chip gps-chip" title="Afficher uniquement les projets géolocalisés">
+                  <input type="checkbox" id="toggleGps">
+                  <span class="status-dot"></span> Géolocalisés
+                </label>
               </div>
             </div>
 
@@ -85,11 +89,6 @@
                 </div>
               </div>
             </div>
-
-            <label class="gps-filter" for="toggleGps">
-              <span class="gps-copy"><strong>Projets géolocalisés</strong><small>Afficher uniquement les projets sur la carte</small></span>
-              <input class="form-check-input" type="checkbox" id="toggleGps">
-            </label>
 
             <div class="filter-actions">
               <button class="btn btn-sm btn-outline-secondary" id="btnReset">Réinitialiser</button>
