@@ -25,24 +25,30 @@ from .models import GpsCoords, ProjectYaml, STATUTS
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
-    "Tu es un expert en ingénierie et architecture chargé d'extraire les "
-    "métadonnées d'un dossier de projet. À partir de la liste des fichiers et "
-    "des extraits de documents fournis, produis UNIQUEMENT un objet JSON avec "
-    "EXACTEMENT ces champs :\n"
+    "Tu es un expert senior en architecture, urbanisme et ingénierie. Tu dois "
+    "extraire les métadonnées d'un dossier de projet à partir de documents parfois "
+    "OCRisés. Analyse toutes les preuves disponibles avant de répondre. Ne devine "
+    "jamais : si une information n'est pas lisible ou contradictoire, utilise une "
+    "chaîne vide ou 0.0 et privilégie la valeur explicitement écrite dans la source. "
+    "Nettoie les erreurs OCR évidentes sans changer le sens. Réponds UNIQUEMENT avec "
+    "un objet JSON valide contenant EXACTEMENT ces champs :\n"
     '- "id": identifiant court unique (ex: "PROJ_2026_001"), dérivé du nom du '
     "dossier si absent des documents\n"
-    '- "nom_projet": nom complet du projet\n'
+    '- "nom_projet": nom complet officiel du projet, pas seulement le nom du dossier\n'
     '- "ref_administrative": référence administrative / permis (chaîne vide si inconnue)\n'
     '- "promoteur": nom du promoteur ou client (chaîne vide si inconnu)\n'
-    '- "adresse": adresse complète du site (chaîne vide si inconnue)\n'
+    '- "adresse": adresse complète du site ou situation géographique (chaîne vide si inconnue)\n'
     '- "coordonnees_gps": objet {"latitude": nombre, "longitude": nombre} avec les '
     'coordonnées réelles si trouvées, sinon {"latitude": 0.0, "longitude": 0.0}\n'
     '- "statut": une valeur parmi "devis", "en_cours", "finalise", "livre" '
     '(défaut "devis")\n'
-    '- "etape_actuelle": étape actuelle du projet (ex: "Étude de structure")\n'
+    '- "etape_actuelle": étape actuelle du projet (ex: "Étude de structure") ; ne confonds pas le type de bâtiment avec une étape\n'
     '- "derniere_mise_a_jour": date ISO 8601 (ex: 2026-09-10T10:00:00Z), la date '
     "du jour si inconnue\n"
-    "Réponds uniquement avec le JSON, sans texte additionnel ni balises markdown."
+    "Règles : conserve les accents et les noms propres, ne fabrique jamais de GPS, "
+    "ne transforme pas une référence de plan en permis, et choisis le statut le plus "
+    "prudent parmi les quatre valeurs autorisées. Réponds uniquement avec le JSON, "
+    "sans texte additionnel ni balises markdown."
 )
 
 
@@ -187,10 +193,14 @@ class AIAgent:
         payload = {
             "dossier": folder.name,
             "fichiers": [
-                {"nom": f.name, "taille_octets": f.stat().st_size} for f in files
+                {"nom": str(f.relative_to(folder)), "taille_octets": f.stat().st_size} for f in files
             ],
             "extraits_documents": self._extract_text_snippets(folder, files),
         }
+        if existing_content:
+            previous = yaml.safe_load(existing_content)
+            if isinstance(previous, dict):
+                payload["metadonnees_existantes"] = previous
 
         meta: Optional[ProjectYaml] = None
         server_ok = self._server_reachable()
@@ -198,6 +208,7 @@ class AIAgent:
             logger.info("Extraction LLM du dossier : %s", folder.name)
             try:
                 raw = self._llm_extract(payload)
+                raw = self._merge_existing_metadata(raw, existing_content)
                 meta = self._normalize_meta(raw, folder.name)
                 self._last_failure_ts = None  # succès → sonde à nouveau autorisée
             except Exception as exc:  # noqa: BLE001 — l'agent ne doit jamais casser la synchro
@@ -225,6 +236,30 @@ class AIAgent:
         )
         logger.info("project.yaml écrit : %s", yaml_path)
         return yaml_path
+
+    @staticmethod
+    def _merge_existing_metadata(data: dict, existing_content: Optional[str]) -> dict:
+        """Conserve une information existante lorsqu'une nouvelle extraction est vide."""
+        if not existing_content:
+            return data
+        previous = yaml.safe_load(existing_content)
+        if not isinstance(previous, dict):
+            return data
+        merged = dict(data)
+        for field in (
+            "nom_projet", "ref_administrative", "promoteur", "adresse", "etape_actuelle",
+        ):
+            if not merged.get(field) and previous.get(field):
+                merged[field] = previous[field]
+        coordinates = merged.get("coordonnees_gps") or {}
+        old_coordinates = previous.get("coordonnees_gps") or {}
+        if not (coordinates.get("latitude") or coordinates.get("longitude")) and (
+            old_coordinates.get("latitude") or old_coordinates.get("longitude")
+        ):
+            merged["coordonnees_gps"] = old_coordinates
+        if merged.get("statut") == "devis" and previous.get("statut") in STATUTS:
+            merged["statut"] = previous["statut"]
+        return merged
 
     def _local_extract(
         self, folder: Path, files: list[Path], existing_content: Optional[str]
@@ -342,7 +377,7 @@ class AIAgent:
     def _extract_text_snippets(self, folder: Path, files: list[Path]) -> list[dict]:
         """Extraits de texte des documents (PDF/Word/texte) pour nourrir le LLM."""
         snippets: list[dict] = []
-        budget = 20_000
+        budget = 45_000
         used = 0
         for f in files:
             ext = f.suffix.lower()
@@ -350,7 +385,7 @@ class AIAgent:
                 if ext in (".txt", ".md", ".csv", ".log"):
                     text = f.read_text(encoding="utf-8", errors="replace")
                 elif ext == ".pdf":
-                    text = self._pdf_text(f, max_pages=3)
+                    text = self._pdf_text(f, max_pages=10)
                 elif ext == ".docx":
                     text = self._docx_text(f)
                 elif ext == ".dxf":
@@ -360,9 +395,9 @@ class AIAgent:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Extraction texte ignorée pour %s : %s", f.name, exc)
                 continue
-            text = (text or "").strip()[:8_000]
+            text = (text or "").strip()[:12_000]
             if text:
-                snippets.append({"fichier": f.name, "extrait": text})
+                snippets.append({"fichier": str(f.relative_to(folder)), "extrait": text})
                 used += len(text)
             if used >= budget:
                 break
@@ -413,7 +448,13 @@ class AIAgent:
         from docx import Document
 
         doc = Document(str(path))
-        return "\n".join(p.text for p in doc.paragraphs if p.text)
+        parts = [p.text for p in doc.paragraphs if p.text]
+        for table in doc.tables:
+            for row in table.rows:
+                values = [cell.text.strip() for cell in row.cells]
+                if any(values):
+                    parts.append(" | ".join(values))
+        return "\n".join(parts)
 
     @staticmethod
     def _dxf_text(path: Path) -> str:
