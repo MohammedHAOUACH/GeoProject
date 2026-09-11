@@ -34,6 +34,8 @@ class LLMAgentConfig(BaseModel):
     temperature: float = 0.1
     # Désactive le raisonnement des modèles qui supportent ce paramètre.
     reasoning_effort: str = "none"
+    # Réponse courte : les métadonnées attendues tiennent dans un petit JSON.
+    max_tokens: int = 800
     # Les serveurs locaux (LM Studio, Ollama…) peuvent être lents au premier
     # appel : chargement du modèle + raisonnement du LLM avant la réponse.
     timeout_seconds: float = 240.0

@@ -167,6 +167,65 @@ def test_extraction_locale_sans_lmstudio(tmp_path):
     assert data["coordonnees_gps"] == {"latitude": 34.0209, "longitude": -6.8416}
 
 
+def test_extraction_locale_met_a_jour_adresse_existante(tmp_path):
+    cfg = SimpleNamespace(
+        base_url="http://localhost:1234/v1", api_key="", model="m",
+        temperature=0.1, reasoning_effort="none", timeout_seconds=10.0, max_retries=0,
+    )
+    agent = AIAgent(cfg)
+    folder = tmp_path / "PROJ_2026_011_Test"
+    _write_doc(folder, "Situation : MERS ACHENNAD, Tanger")
+    (folder / "project.yaml").write_text(yaml.safe_dump({
+        "id": "PROJ_2026_011",
+        "nom_projet": "Projet existant",
+        "adresse": "Adresse approximative",
+    }), encoding="utf-8")
+
+    agent.process_folder(folder, use_llm=True)
+    data = yaml.safe_load((folder / "project.yaml").read_text(encoding="utf-8"))
+    assert data["adresse"] == "MERS ACHENNAD, Tanger"
+
+
+def test_geocode_adresse_si_gps_absent(monkeypatch):
+    from app.ai_agent import GpsCoords, ProjectYaml
+
+    calls = []
+
+    def fake_geocode(meta):
+        calls.append(meta.adresse)
+        return meta.model_copy(update={
+            "coordonnees_gps": GpsCoords(latitude=34.0209, longitude=-6.8416),
+        })
+
+    monkeypatch.setattr(AIAgent, "_geocode_missing_coordinates", staticmethod(fake_geocode))
+    meta = ProjectYaml(id="P1", nom_projet="Projet", adresse="Rabat")
+    result = AIAgent._geocode_missing_coordinates(meta)
+    assert calls == ["Rabat"]
+    assert result.coordonnees_gps.latitude == 34.0209
+    assert result.coordonnees_gps.longitude == -6.8416
+
+
+def test_geocode_repli_sur_la_ville(monkeypatch):
+    from app.ai_agent import GpsCoords, ProjectYaml
+
+    queries = []
+
+    class FakeGeocoder:
+        def geocode(self, query, **kwargs):
+            queries.append(query)
+            if query == "Tanger, Maroc":
+                return SimpleNamespace(latitude=35.7696, longitude=-5.8033)
+            return None
+
+    import geopy.geocoders
+    monkeypatch.setattr(geopy.geocoders, "Nominatim", lambda **kwargs: FakeGeocoder())
+    AIAgent._geocode_cache.clear()
+    meta = ProjectYaml(id="P2", nom_projet="Projet", adresse="MERS ACHENNAD, Tanger")
+    result = AIAgent._geocode_missing_coordinates(meta)
+    assert queries == ["MERS ACHENNAD, Tanger, Maroc", "Tanger, Maroc"]
+    assert result.coordonnees_gps == GpsCoords(latitude=35.7696, longitude=-5.8033)
+
+
 def test_extraction_ecrit_yaml_complet(tmp_path, fake_llm_factory):
     """Réponse LLM valide → project.yaml complet écrit et validé."""
     fake_llm_factory(

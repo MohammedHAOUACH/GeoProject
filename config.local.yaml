@@ -23,6 +23,7 @@ llm_agent:
   model: "ornith-1.5-9b-abliterated-mlx"
   temperature: 0.0
   reasoning_effort: "none"
+  max_tokens: 800
   # Modèle local de raisonnement : 1re inférence lente (chargement + réflexion).
   timeout_seconds: 600
   max_retries: 0

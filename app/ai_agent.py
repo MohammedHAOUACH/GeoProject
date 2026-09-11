@@ -45,7 +45,8 @@ SYSTEM_PROMPT = (
     '- "etape_actuelle": étape actuelle du projet (ex: "Étude de structure") ; ne confonds pas le type de bâtiment avec une étape\n'
     '- "derniere_mise_a_jour": date ISO 8601 (ex: 2026-09-10T10:00:00Z), la date '
     "du jour si inconnue\n"
-    "Règles : conserve les accents et les noms propres, ne fabrique jamais de GPS, "
+    "Règles : ne produis aucune réflexion, analyse ou explication ; génère directement "
+    "le JSON final. Conserve les accents et les noms propres, ne fabrique jamais de GPS, "
     "ne transforme pas une référence de plan en permis, et choisis le statut le plus "
     "prudent parmi les quatre valeurs autorisées. Réponds uniquement avec le JSON, "
     "sans texte additionnel ni balises markdown."
@@ -93,6 +94,7 @@ class AIAgent:
     # la synchronisation reste instantanée au lieu d'attendre le timeout LLM
     # sur chaque dossier.
     PROBE_INTERVAL = 60.0
+    _geocode_cache: dict[str, tuple[float, float]] = {}
 
     def __init__(self, cfg: LLMAgentConfig, api_key_override: str = "") -> None:
         self.cfg = cfg
@@ -183,6 +185,7 @@ class AIAgent:
         if not self.enabled:
             local_meta = self._local_extract(folder, files, existing_content)
             if local_meta is not None:
+                local_meta = self._geocode_missing_coordinates(local_meta)
                 yaml_path = folder / "project.yaml"
                 yaml_path.write_text(
                     yaml.safe_dump(local_meta.model_dump(mode="json"), allow_unicode=True, sort_keys=False),
@@ -209,7 +212,10 @@ class AIAgent:
             try:
                 raw = self._llm_extract(payload)
                 raw = self._merge_existing_metadata(raw, existing_content)
+                local_meta = self._local_extract(folder, files, existing_content)
+                raw = self._merge_metadata_values(raw, local_meta)
                 meta = self._normalize_meta(raw, folder.name)
+                meta = self._geocode_missing_coordinates(meta)
                 self._last_failure_ts = None  # succès → sonde à nouveau autorisée
             except Exception as exc:  # noqa: BLE001 — l'agent ne doit jamais casser la synchro
                 logger.warning(
@@ -237,6 +243,45 @@ class AIAgent:
         logger.info("project.yaml écrit : %s", yaml_path)
         return yaml_path
 
+    @classmethod
+    def _geocode_missing_coordinates(cls, meta: ProjectYaml) -> ProjectYaml:
+        """Complète les GPS absents à partir de l'adresse, sans les écraser."""
+        if meta.a_des_gps or not meta.adresse.strip():
+            return meta
+        address = meta.adresse.strip()
+        if address in cls._geocode_cache:
+            latitude, longitude = cls._geocode_cache[address]
+            return meta.model_copy(update={
+                "coordonnees_gps": GpsCoords(latitude=latitude, longitude=longitude),
+            })
+        try:
+            from geopy.geocoders import Nominatim
+
+            geocoder = Nominatim(user_agent="samaconcept-geoprojects/1.0")
+            queries = [f"{address}, Maroc"]
+            parts = [part.strip() for part in address.split(",") if part.strip()]
+            if len(parts) > 1:
+                queries.append(f"{parts[-1]}, Maroc")
+            location = None
+            for query in queries:
+                location = geocoder.geocode(query, exactly_one=True, timeout=8)
+                if location is not None:
+                    break
+            if location is None:
+                logger.info("Adresse non géocodée : %s", address)
+                return meta
+            coordinates = (float(location.latitude), float(location.longitude))
+            cls._geocode_cache[address] = coordinates
+            logger.info("Adresse géocodée : %s -> %s", address, coordinates)
+            return meta.model_copy(update={
+                "coordonnees_gps": GpsCoords(
+                    latitude=coordinates[0], longitude=coordinates[1]
+                ),
+            })
+        except Exception as exc:  # noqa: BLE001 — le géocodage reste facultatif
+            logger.warning("Géocodage impossible pour %s : %s", address, exc)
+            return meta
+
     @staticmethod
     def _merge_existing_metadata(data: dict, existing_content: Optional[str]) -> dict:
         """Conserve une information existante lorsqu'une nouvelle extraction est vide."""
@@ -261,6 +306,24 @@ class AIAgent:
             merged["statut"] = previous["statut"]
         return merged
 
+    @staticmethod
+    def _merge_metadata_values(data: dict, source: Optional[ProjectYaml]) -> dict:
+        """Complète une réponse LLM vide avec les valeurs extraites localement."""
+        if source is None:
+            return data
+        merged = dict(data)
+        for field in (
+            "nom_projet", "ref_administrative", "promoteur", "adresse", "etape_actuelle",
+        ):
+            if getattr(source, field) and (field == "adresse" or not merged.get(field)):
+                merged[field] = getattr(source, field)
+        coordinates = merged.get("coordonnees_gps") or {}
+        if not (coordinates.get("latitude") or coordinates.get("longitude")) and source.a_des_gps:
+            merged["coordonnees_gps"] = source.coordonnees_gps.model_dump()
+        if merged.get("statut") == "devis" and source.statut != "devis":
+            merged["statut"] = source.statut
+        return merged
+
     def _local_extract(
         self, folder: Path, files: list[Path], existing_content: Optional[str]
     ) -> Optional[ProjectYaml]:
@@ -283,7 +346,7 @@ class AIAgent:
 
         patterns = {
             "nom_projet": r"(?:projet|project|nom)\s*:\s*(.+)",
-            "adresse": r"(?:adresse|site|lieu|situation)\s*:\s*(.+)",
+            "adresse": r"(?:adresse|site|lieu)\s*:\s*(.+)",
             "promoteur": r"(?:promoteur|client|ma[iî]tre\s+d['’]ouvrage)\s*:\s*(.+)",
             "ref_administrative": r"(?:r[ée]f(?:[ée]rence)?|permis)\s*:\s*(.+)",
             "etape_actuelle": r"(?:[ée]tape|phase)\s*:\s*(.+)",
@@ -294,8 +357,14 @@ class AIAgent:
             can_fill = field not in provided_fields or not base.get(field)
             if field == "nom_projet" and base.get(field) == generated_name:
                 can_fill = True
-            if match and can_fill:
+            if match and (can_fill or field == "adresse"):
                 base[field] = match.group(1).strip()
+
+        # Dans une fiche architecte, "Adresse" peut désigner le cabinet.
+        # La ligne "Situation" désigne le site du projet et doit primer.
+        situation = re.search(r"situation\s*:\s*(.+)", text, re.IGNORECASE)
+        if situation:
+            base["adresse"] = situation.group(1).strip()
 
         gps = base.get("coordonnees_gps") or {}
         coordinate_match = re.search(
@@ -326,7 +395,12 @@ class AIAgent:
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False, indent=2)},
         ]
-        kwargs = {"model": self.cfg.model, "temperature": self.cfg.temperature, "messages": messages}
+        kwargs = {
+            "model": self.cfg.model,
+            "temperature": self.cfg.temperature,
+            "max_tokens": getattr(self.cfg, "max_tokens", 800),
+            "messages": messages,
+        }
         reasoning_effort = getattr(self.cfg, "reasoning_effort", "")
         if reasoning_effort:
             kwargs["reasoning_effort"] = reasoning_effort
@@ -377,9 +451,13 @@ class AIAgent:
     def _extract_text_snippets(self, folder: Path, files: list[Path]) -> list[dict]:
         """Extraits de texte des documents (PDF/Word/texte) pour nourrir le LLM."""
         snippets: list[dict] = []
-        budget = 45_000
+        # Contexte calibré pour les modèles locaux 7B/9B : privilégier les
+        # premières pages et éviter une génération interminable.
+        budget = 20_000
         used = 0
         for f in files:
+            if f.name.lower() == "project.yaml":
+                continue
             ext = f.suffix.lower()
             try:
                 if ext in (".txt", ".md", ".csv", ".log"):
@@ -395,7 +473,7 @@ class AIAgent:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Extraction texte ignorée pour %s : %s", f.name, exc)
                 continue
-            text = (text or "").strip()[:12_000]
+            text = (text or "").strip()[:6_000]
             if text:
                 snippets.append({"fichier": str(f.relative_to(folder)), "extrait": text})
                 used += len(text)
@@ -405,12 +483,21 @@ class AIAgent:
 
     @staticmethod
     def _pdf_text(path: Path, max_pages: int = 3) -> str:
-        from pypdf import PdfReader
+        try:
+            import fitz
 
-        reader = PdfReader(str(path))
-        text = "\n".join(
-            (page.extract_text() or "") for page in reader.pages[:max_pages]
-        )
+            document = fitz.open(str(path))
+            try:
+                text = "\n".join(page.get_text() for page in document[:max_pages])
+            finally:
+                document.close()
+        except Exception:
+            from pypdf import PdfReader
+
+            reader = PdfReader(str(path))
+            text = "\n".join(
+                (page.extract_text() or "") for page in reader.pages[:max_pages]
+            )
         if len(text.strip()) >= 20:
             return text
         return AIAgent._pdf_ocr(path, max_pages=max_pages)
@@ -429,16 +516,19 @@ class AIAgent:
         document = fitz.open(str(path))
         texts: list[str] = []
         try:
-            for page in document[:max_pages]:
+            for page in document[:min(max_pages, 3)]:
                 pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
                 image = Image.frombytes("RGB", [pixmap.width, pixmap.height], pixmap.samples)
                 try:
-                    texts.append(pytesseract.image_to_string(image, lang="fra+eng"))
+                    texts.append(pytesseract.image_to_string(image, lang="fra+eng", timeout=20))
                 except pytesseract.TesseractNotFoundError as exc:
                     logger.warning("Moteur Tesseract absent pour %s : %s", path.name, exc)
                     return ""
+                except RuntimeError as exc:
+                    logger.warning("OCR interrompu pour %s : %s", path.name, exc)
+                    break
                 except pytesseract.TesseractError:
-                    texts.append(pytesseract.image_to_string(image, lang="eng"))
+                    texts.append(pytesseract.image_to_string(image, lang="eng", timeout=20))
         finally:
             document.close()
         return "\n".join(texts)
