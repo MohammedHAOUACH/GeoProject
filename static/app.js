@@ -121,16 +121,16 @@ function initMap() {
   map.on('load', () => {
     map.addSource('projects', { type: 'geojson', data: projectsToGeoJSON([]) });
 
-    // Libellés des villes (sous les marqueurs)
+    // Noms des projets affichés sous les marqueurs
     map.addLayer({
       id: 'project-labels',
       type: 'symbol',
       source: 'projects',
       layout: {
-        'text-field': ['get', 'ville'],
-        'text-size': 12,
+        'text-field': ['coalesce', ['get', 'nom_projet'], ['get', 'ville']],
+        'text-size': 11,
         'text-anchor': 'top',
-        'text-offset': [0, 1.3],
+        'text-offset': [0, 1.5],
         'text-font': ['Noto Sans Regular'],
       },
       paint: {
