@@ -427,7 +427,7 @@ function bindEvents() {
     applyFilters();
   }, 300));
 
-  document.querySelectorAll('#statutFilters input[type=checkbox]').forEach((cb) => {
+  document.querySelectorAll('#statutFilters input[type=checkbox]:not(#toggleGps)').forEach((cb) => {
     cb.addEventListener('change', () => {
       if (cb.checked) state.filters.statuts.add(cb.value);
       else state.filters.statuts.delete(cb.value);
