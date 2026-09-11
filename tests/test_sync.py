@@ -50,6 +50,58 @@ def test_sync_indexe_les_yaml_valides(tmp_path):
     assert data["coordonnees_gps"] == {"latitude": 0.0, "longitude": 0.0}
 
 
+def test_sync_accepte_yaml_minimal_et_integre_les_mises_a_jour(tmp_path):
+    root = tmp_path / "projets"
+    folder = root / "PROJ_MINIMAL_Marina"
+    folder.mkdir(parents=True)
+    yaml_path = folder / "project.yaml"
+    yaml_path.write_text(yaml.safe_dump({
+        "nom_projet": "Marina initiale",
+        "adresse": "Port de Tanger",
+    }), encoding="utf-8")
+
+    worker, db = make_worker(tmp_path, "projets")
+    worker.sync_once()
+
+    project = db.get_project("PROJ_MINIMAL_Marina")
+    assert project["nom_projet"] == "Marina initiale"
+    assert project["adresse"] == "Port de Tanger"
+
+    yaml_path.write_text(yaml.safe_dump({
+        "nom_projet": "Marina rénovée",
+        "adresse": "Nouvelle adresse, Tanger",
+    }), encoding="utf-8")
+    worker.sync_once()
+
+    updated = db.get_project("PROJ_MINIMAL_Marina")
+    assert updated["nom_projet"] == "Marina rénovée"
+    assert updated["adresse"] == "Nouvelle adresse, Tanger"
+
+
+def test_sync_integre_un_changement_d_id(tmp_path):
+    root = tmp_path / "projets"
+    folder = root / "PROJ_A_Ancien"
+    folder.mkdir(parents=True)
+    yaml_path = folder / "project.yaml"
+    yaml_path.write_text(yaml.safe_dump({
+        "id": "ANCIEN_ID",
+        "nom_projet": "Projet A",
+    }), encoding="utf-8")
+
+    worker, db = make_worker(tmp_path, "projets")
+    worker.sync_once()
+    assert db.get_project("ANCIEN_ID") is not None
+
+    yaml_path.write_text(yaml.safe_dump({
+        "id": "NOUVEL_ID",
+        "nom_projet": "Projet A renommé",
+    }), encoding="utf-8")
+    worker.sync_once()
+
+    assert db.get_project("ANCIEN_ID") is None
+    assert db.get_project("NOUVEL_ID")["nom_projet"] == "Projet A renommé"
+
+
 def test_sync_ignore_yaml_invalide_sans_planter(tmp_path):
     root = tmp_path / "projets"
     write_project(root, "PROJ_OK", {"id": "OK1", "nom_projet": "Valide"})

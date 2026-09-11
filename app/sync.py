@@ -17,7 +17,7 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from .ai_agent import AIAgent
+from .ai_agent import AIAgent, derive_id
 from .config import Config
 from .database import Database
 from .models import ProjectYaml
@@ -31,6 +31,9 @@ def parse_project_yaml(path: Path) -> ProjectYaml | None:
         raw = yaml.safe_load(path.read_text(encoding="utf-8", errors="replace"))
         if not isinstance(raw, dict):
             raise ValueError("contenu YAML non mappable")
+        # Le nom du dossier fournit un identifiant stable pour les YAML
+        # minimaux qui contiennent seulement le nom et l'adresse du projet.
+        raw.setdefault("id", derive_id(path.parent.name))
         model = ProjectYaml.model_validate(raw)
         if model.derniere_mise_a_jour is None:
             model.derniere_mise_a_jour = datetime.fromtimestamp(
