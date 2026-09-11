@@ -173,7 +173,17 @@ class AIAgent:
             logger.info("project.yaml minimal écrit (indexation) : %s", yaml_path)
             return yaml_path
 
-        files = sorted(p for p in folder.iterdir() if p.is_file())
+        files = sorted(p for p in folder.rglob("*") if p.is_file())
+        if not self.enabled:
+            local_meta = self._local_extract(folder, files, existing_content)
+            if local_meta is not None:
+                yaml_path = folder / "project.yaml"
+                yaml_path.write_text(
+                    yaml.safe_dump(local_meta.model_dump(mode="json"), allow_unicode=True, sort_keys=False),
+                    encoding="utf-8",
+                )
+                logger.info("Métadonnées extraites localement : %s", yaml_path)
+            return existing_yaml if existing_content is not None and local_meta is None else yaml_path
         payload = {
             "dossier": folder.name,
             "fichiers": [
@@ -215,6 +225,52 @@ class AIAgent:
         )
         logger.info("project.yaml écrit : %s", yaml_path)
         return yaml_path
+
+    def _local_extract(
+        self, folder: Path, files: list[Path], existing_content: Optional[str]
+    ) -> Optional[ProjectYaml]:
+        """Extrait des métadonnées sans LLM à partir des documents lisibles."""
+        snippets = self._extract_text_snippets(folder, files)
+        text = "\n".join(item["extrait"] for item in snippets)
+        if not text and existing_content is not None:
+            return None
+
+        base = yaml.safe_load(existing_content) if existing_content else {}
+        if not isinstance(base, dict):
+            base = {}
+        provided_fields = set(base)
+        base.setdefault("id", derive_id(folder.name))
+        base.setdefault("nom_projet", folder.name.replace("_", " ").strip())
+        base.setdefault("adresse", "")
+        base.setdefault("coordonnees_gps", {"latitude": 0.0, "longitude": 0.0})
+        base.setdefault("statut", "devis")
+        base.setdefault("derniere_mise_a_jour", datetime.now(timezone.utc).isoformat())
+
+        patterns = {
+            "nom_projet": r"(?:projet|project|nom)\s*:\s*(.+)",
+            "adresse": r"(?:adresse|site|lieu)\s*:\s*(.+)",
+            "promoteur": r"(?:promoteur|client|ma[iî]tre\s+d['’]ouvrage)\s*:\s*(.+)",
+            "ref_administrative": r"(?:r[ée]f(?:[ée]rence)?|permis)\s*:\s*(.+)",
+            "etape_actuelle": r"(?:[ée]tape|phase)\s*:\s*(.+)",
+        }
+        for field, pattern in patterns.items():
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match and (field not in provided_fields or not base.get(field)):
+                base[field] = match.group(1).strip()
+
+        gps = base.get("coordonnees_gps") or {}
+        coordinate_match = re.search(
+            r"latitude\s*[:=]\s*(-?\d+(?:\.\d+)?)\D+longitude\s*[:=]\s*(-?\d+(?:\.\d+)?)",
+            text,
+            re.IGNORECASE,
+        )
+        if coordinate_match and not (gps.get("latitude") or gps.get("longitude")):
+            gps = {
+                "latitude": float(coordinate_match.group(1)),
+                "longitude": float(coordinate_match.group(2)),
+            }
+        base["coordonnees_gps"] = gps
+        return self._normalize_meta(base, folder.name)
 
     # ------------------------------------------------------------- extraction LLM
 
@@ -293,8 +349,10 @@ class AIAgent:
                     text = self._pdf_text(f, max_pages=3)
                 elif ext == ".docx":
                     text = self._docx_text(f)
+                elif ext == ".dxf":
+                    text = self._dxf_text(f)
                 else:
-                    continue  # DWG, images… : seul le nom de fichier est transmis
+                    continue  # DWG binaire, images… non lisibles sans convertisseur
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Extraction texte ignorée pour %s : %s", f.name, exc)
                 continue
@@ -321,3 +379,16 @@ class AIAgent:
 
         doc = Document(str(path))
         return "\n".join(p.text for p in doc.paragraphs if p.text)
+
+    @staticmethod
+    def _dxf_text(path: Path) -> str:
+        """Lit les textes et attributs d'un plan DXF avec ezdxf."""
+        import ezdxf
+
+        doc = ezdxf.readfile(str(path))
+        texts: list[str] = []
+        for entity in doc.modelspace().query("TEXT MTEXT ATTRIB ATTDEF"):
+            value = getattr(entity.dxf, "text", "") or getattr(entity.dxf, "default", "")
+            if value:
+                texts.append(str(value))
+        return "\n".join(texts)

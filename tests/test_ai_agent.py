@@ -145,6 +145,28 @@ def _write_doc(folder: Path, text: str) -> None:
     (folder / "note_synthese.txt").write_text(text, encoding="utf-8")
 
 
+def test_extraction_locale_sans_lmstudio(tmp_path):
+    """Sans clé LLM, les champs lisibles sont extraits localement."""
+    cfg = SimpleNamespace(
+        base_url="http://localhost:1234/v1", api_key="", model="m",
+        temperature=0.1, reasoning_effort="none", timeout_seconds=10.0, max_retries=0,
+    )
+    agent = AIAgent(cfg)
+    folder = tmp_path / "PROJ_2026_010_Centre_Test"
+    _write_doc(
+        folder,
+        "Projet : Centre Test\nAdresse : Avenue Hassan II, Rabat\n"
+        "Promoteur : Groupe Exemple\nLatitude: 34.0209, longitude: -6.8416",
+    )
+
+    agent.process_folder(folder, use_llm=True)
+    data = yaml.safe_load((folder / "project.yaml").read_text(encoding="utf-8"))
+    assert data["nom_projet"] == "Centre Test"
+    assert data["adresse"] == "Avenue Hassan II, Rabat"
+    assert data["promoteur"] == "Groupe Exemple"
+    assert data["coordonnees_gps"] == {"latitude": 34.0209, "longitude": -6.8416}
+
+
 def test_extraction_ecrit_yaml_complet(tmp_path, fake_llm_factory):
     """Réponse LLM valide → project.yaml complet écrit et validé."""
     fake_llm_factory(

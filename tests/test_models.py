@@ -43,13 +43,15 @@ def test_parse_statut_invalide_ignore(tmp_path):
     assert parse_project_yaml(path) is None
 
 
-def test_parse_manquant_id_ignore(tmp_path):
-    path = tmp_path / "project.yaml"
+def test_parse_manquant_id_derive_depuis_dossier(tmp_path):
+    folder = tmp_path / "PROJ_MINIMAL_Test"
+    folder.mkdir()
+    path = folder / "project.yaml"
     path.write_text(
         yaml.safe_dump({"nom_projet": "Sans id", "coordonnees_gps": {}}),
         encoding="utf-8",
     )
-    assert parse_project_yaml(path) is None
+    assert parse_project_yaml(path).id == "PROJ_MINIMAL_Test"
 
 
 def test_parse_yaml_malforme_ignore(tmp_path):

@@ -94,19 +94,13 @@ async def sync(request: Request) -> dict:
     return result
 
 
-@router.post("/extract", summary="Lance le robot AI (LLM, gourmand) sur les dossiers à traiter")
+@router.post("/extract", summary="Lance l'extraction locale ou LLM des dossiers")
 async def extract(request: Request) -> dict:
     """Extraction LLM lancée UNIQUEMENT à la demande (bouton 🤖).
 
     Tourne en arrière-plan : la réponse immédiate contient l'état du job
     (``running: true``) ; suivre la progression via GET /api/extract/status.
     """
-    agent = request.app.state.agent
-    if not agent.enabled:
-        raise HTTPException(
-            status_code=409,
-            detail="Agent AI désactivé : renseignez llm_agent.api_key dans config.yaml",
-        )
     return request.app.state.sync.start_ai_extraction()
 
 

@@ -386,9 +386,11 @@ async function pollExtract() {
 }
 
 function renderExtractStatus(st) {
-  // Bouton masqué si l'agent AI est désactivé (pas de clé API configurée).
-  els.extract.classList.toggle('d-none', !st.enabled);
-  if (!st.enabled) return;
+  els.extract.classList.remove('d-none');
+  if (!st.enabled) {
+    els.extractIcon.textContent = '📄';
+    els.extractLabel.textContent = 'Extraire (local)';
+  }
   if (st.running) {
     els.extract.disabled = true;
     els.extract.classList.add('ai-running');
@@ -404,7 +406,7 @@ function renderExtractStatus(st) {
     els.extractIcon.textContent = errs ? '⚠️' : (st.finished_at ? '✅' : '🤖');
     els.extractLabel.textContent = st.finished_at
       ? `Terminé · ${st.done}/${st.total}${skipped}${errs}`
-      : 'Extraire (AI)';
+      : (st.enabled ? 'Extraire (AI)' : 'Extraire (local)');
   }
 }
 
@@ -482,7 +484,10 @@ function bindEvents() {
 
   // Robot AI (gourmand) : lancé uniquement au clic, progression en direct.
   els.extract.addEventListener('click', async () => {
-    if (!confirm('Lancer le robot AI ? Extraction LLM de tous les dossiers à traiter — très gourmand en ressources (plusieurs minutes par dossier).')) return;
+    const mode = els.extractLabel.textContent.includes('local')
+      ? 'Extraction locale des fichiers PDF, Word et DXF'
+      : 'Extraction LLM de tous les dossiers à traiter';
+    if (!confirm(`Lancer l'extraction ? ${mode}.`)) return;
     try {
       await fetchJSON('/api/extract', { method: 'POST' });
       await pollExtract();

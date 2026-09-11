@@ -104,7 +104,7 @@ class SyncWorker:
                 with self._ai_lock:
                     self.ai_status["current"] = folder.name
                 try:
-                    if not self._needs_ai(folder):
+                    if self.agent.enabled and not self._needs_ai(folder):
                         with self._ai_lock:
                             self.ai_status["skipped"] += 1
                             self.ai_status["done"] += 1
