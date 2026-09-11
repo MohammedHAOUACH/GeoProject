@@ -126,6 +126,7 @@ function initMap() {
       id: 'project-labels',
       type: 'symbol',
       source: 'projects',
+      minzoom: 12,
       layout: {
         'text-field': ['coalesce', ['get', 'nom_projet'], ['get', 'ville']],
         'text-size': 11,
